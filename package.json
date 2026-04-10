@@ -1,7 +1,7 @@
 {
   "name": "pi-meridian-extension",
   "version": "0.1.0",
-  "private": true,
+  "description": "Meridian proxy provider for pi — use your Claude Max subscription through the Meridian local proxy",
   "type": "module",
   "keywords": ["pi-package", "pi", "meridian", "claude"],
   "peerDependencies": {
