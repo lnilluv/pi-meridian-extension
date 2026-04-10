@@ -4,6 +4,10 @@
   "description": "Meridian proxy provider for pi — use your Claude Max subscription through the Meridian local proxy",
   "type": "module",
   "keywords": ["pi-package", "pi", "meridian", "claude"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lnilluv/pi-meridian-extension"
+  },
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": "*"
   },
