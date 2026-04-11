@@ -41,6 +41,21 @@ npm install -g @rynfar/meridian
 |---------|---------|-------------|
 | `MERIDIAN_BASE_URL` | `http://127.0.0.1:3456` | Meridian proxy URL |
 
+## Subagent Compatibility
+
+When using pi-subagents with custom agent definitions (`.md` files in `~/.pi/agent/agents/`), you must add the meridian extension to each agent's `extensions:` frontmatter. Without this, user-defined agents spawn with `--no-extensions`, which strips all global extensions — including this one — so the `meridian` provider won't be available.
+
+Add the meridian extension path to your agent's frontmatter:
+
+```yaml
+---
+name: my-agent
+extensions: /path/to/other/extension.ts, /opt/homebrew/lib/node_modules/pi-meridian-extension/extensions/index.ts
+---
+```
+
+> **Note**: This is only needed for user-defined agents with explicit `extensions:` in their frontmatter. Builtin agents (like `delegate`) inherit global extensions automatically.
+
 ## Switch to Meridian
 
 After installing, switch your model in pi:
