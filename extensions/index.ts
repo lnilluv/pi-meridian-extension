@@ -427,6 +427,30 @@ export default function (pi: ExtensionAPI) {
     };
   });
 
+  // Proactive error detection via HTTP status — fires before stream consumption.
+  // This catches auth failures, server errors, and rate limits before the
+  // user sees a cryptic streaming error.
+  pi.on("after_provider_response", (event, ctx) => {
+    if (ctx.model?.provider !== "meridian") return;
+
+    if (event.status === 401 || event.status === 403) {
+      ctx.ui.notify(
+        `Meridian auth error (HTTP ${event.status}). Run /meridian to check login status.`,
+        "error"
+      );
+    } else if (event.status >= 500) {
+      ctx.ui.notify(
+        `Meridian server error (HTTP ${event.status}). The proxy may be misconfigured or down.`,
+        "error"
+      );
+    } else if (event.status >= 400) {
+      ctx.ui.notify(
+        `Meridian request error (HTTP ${event.status}).`,
+        "warning"
+      );
+    }
+  });
+
   // Register /meridian command with optional "start" argument
   pi.registerCommand("meridian", {
     description: "Check Meridian status. Use: /meridian start | /meridian version",

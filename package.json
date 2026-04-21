@@ -9,7 +9,7 @@
     "url": "https://github.com/lnilluv/pi-meridian-extension"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "*"
+    "@mariozechner/pi-coding-agent": ">=0.67.4"
   },
   "pi": {
     "extensions": ["./extensions"]
