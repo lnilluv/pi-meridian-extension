@@ -6,7 +6,7 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 ## What it does
 
-- **Registers a `meridian` provider** with 5 Claude models (Sonnet 4.5, Opus 4.5, Sonnet 4.6, Opus 4.6, Haiku 4.5)
+- **Registers a `meridian` provider** with the current Meridian Claude models (Sonnet 4.6, Opus 4.6, Opus 4.7, Haiku 4.5)
 - **Rewrites the system prompt** for Meridian requests to avoid the extra-usage error, preserving project context and working directory
 - **Auto-starts Meridian** on session start if the proxy isn't running
 - **Adds commands**: `/meridian` (health check), `/meridian start`, `/meridian version`
@@ -15,13 +15,12 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 | ID | Name |
 |----|------|
-| `meridian/claude-sonnet-4-5` | Claude Sonnet 4.5 |
-| `meridian/claude-opus-4-5` | Claude Opus 4.5 |
 | `meridian/claude-sonnet-4-6` | Claude Sonnet 4.6 |
 | `meridian/claude-opus-4-6` | Claude Opus 4.6 |
+| `meridian/claude-opus-4-7` | Claude Opus 4.7 |
 | `meridian/claude-haiku-4-5` | Claude Haiku 4.5 |
 
-Use them with `--model`, e.g. `--model meridian/claude-opus-4-6:high`.
+Use them with `--model`, e.g. `--model meridian/claude-opus-4-7:high`.
 
 ## Install
 
@@ -40,6 +39,8 @@ npm install -g @rynfar/meridian
 | Env var | Default | Description |
 |---------|---------|-------------|
 | `MERIDIAN_BASE_URL` | `http://127.0.0.1:3456` | Meridian proxy URL |
+| `MERIDIAN_API_KEY` | `meridian` | Bearer token sent to Meridian. Set this to the same value as the Meridian daemon when upstream API-key auth is enabled. |
+| `MERIDIAN_PROFILE` | unset | Optional Meridian profile ID sent as `x-meridian-profile` for multi-profile setups. |
 
 ## Subagent Compatibility
 
@@ -61,18 +62,18 @@ extensions: /path/to/other/extension.ts, /opt/homebrew/lib/node_modules/pi-merid
 After installing, switch your model in pi:
 
 ```
-/model meridian/claude-opus-4-6:high
+/model meridian/claude-opus-4-7:high
 ```
 
 Or use it for a single command:
 
 ```bash
-pi --model meridian/claude-opus-4-6:high
+pi --model meridian/claude-opus-4-7:high
 ```
 
 ## Commands
 
-- `/meridian` — health check (connection status, auth, mode)
+- `/meridian` — health check (connection status, runtime version, auth, mode)
 - `/meridian start` — start the Meridian daemon if not running
 - `/meridian version` — check installed vs latest version, update availability
 

@@ -14,12 +14,38 @@ const STARTUP_WAIT_MS = 6000;
 const STARTUP_POLL_MS = 500;
 const DEFAULT_MODEL_INPUT: ("text" | "image")[] = ["text", "image"];
 const DEFAULT_CONTEXT_WINDOW = 200000;
+const EXTENDED_CONTEXT_WINDOW = 1000000;
+const SONNET_MAX_TOKENS = 64000;
+const OPUS_MAX_TOKENS = 32768;
+const HAIKU_MAX_TOKENS = 16384;
 const SONNET_COST = { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 } as const;
 const OPUS_COST = { input: 15, output: 75, cacheRead: 1.5, cacheWrite: 18.75 } as const;
 const HAIKU_COST = { input: 0.8, output: 4, cacheRead: 0.08, cacheWrite: 1 } as const;
 
 function getBaseUrl(): string {
   return process.env.MERIDIAN_BASE_URL || DEFAULT_BASE_URL;
+}
+
+function getApiKey(): string {
+  return process.env.MERIDIAN_API_KEY?.trim() || "meridian";
+}
+
+function getProviderHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    "x-meridian-agent": "pi",
+  };
+  const profile = process.env.MERIDIAN_PROFILE?.trim();
+  if (profile) {
+    headers["x-meridian-profile"] = profile;
+  }
+  return headers;
+}
+
+function getMeridianRequestHeaders(): Record<string, string> {
+  return {
+    ...getProviderHeaders(),
+    Authorization: `Bearer ${getApiKey()}`,
+  };
 }
 
 function getPortFromBaseUrl(baseUrl: string): number {
@@ -93,6 +119,7 @@ function buildMeridianSafeSystemPrompt(
 
 interface MeridianHealth {
   status: string;
+  version?: string;
   auth?: {
     loggedIn: boolean;
     email?: string;
@@ -104,7 +131,8 @@ interface MeridianHealth {
 
 async function fetchHealth(
   baseUrl: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  headers = getMeridianRequestHeaders()
 ): Promise<MeridianHealth> {
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
 
@@ -122,6 +150,7 @@ async function fetchHealth(
 
   try {
     const response = await fetch(`${baseUrl}/health`, {
+      headers,
       signal: controller.signal,
     });
     const body = await response.text();
@@ -171,10 +200,11 @@ function isValidHealth(h: unknown): h is MeridianHealth {
 
 async function isReachable(
   baseUrl: string,
-  timeoutMs = HEALTH_TIMEOUT_MS
+  timeoutMs = HEALTH_TIMEOUT_MS,
+  headers = getMeridianRequestHeaders()
 ): Promise<{ ok: boolean; health?: MeridianHealth }> {
   try {
-    const health = await fetchHealth(baseUrl, AbortSignal.timeout(timeoutMs));
+    const health = await fetchHealth(baseUrl, AbortSignal.timeout(timeoutMs), headers);
     return { ok: true, health };
   } catch {
     return { ok: false };
@@ -193,7 +223,8 @@ let versionChecked = false;
  */
 async function startMeridianDaemon(
   baseUrl: string,
-  port: number
+  port: number,
+  headers = getMeridianRequestHeaders()
 ): Promise<boolean> {
   // Dedupe: if a start is already in flight, wait on it
   if (startInFlight) return startInFlight;
@@ -240,7 +271,7 @@ async function startMeridianDaemon(
       const deadline = Date.now() + STARTUP_WAIT_MS;
       while (Date.now() < deadline) {
         const remaining = deadline - Date.now();
-        if ((await isReachable(baseUrl, Math.min(HEALTH_TIMEOUT_MS, remaining))).ok) {
+        if ((await isReachable(baseUrl, Math.min(HEALTH_TIMEOUT_MS, remaining), headers)).ok) {
           return true;
         }
         await new Promise((r) => setTimeout(r, STARTUP_POLL_MS));
@@ -355,35 +386,21 @@ async function checkVersion(): Promise<VersionStatus> {
 export default function (pi: ExtensionAPI) {
   const baseUrl = getBaseUrl();
   const port = getPortFromBaseUrl(baseUrl);
+  const apiKey = getApiKey();
+  const providerHeaders = getProviderHeaders();
+  const requestHeaders = {
+    ...providerHeaders,
+    Authorization: `Bearer ${apiKey}`,
+  };
 
   // Register the Meridian provider
   pi.registerProvider("meridian", {
     baseUrl,
-    apiKey: "meridian", // Placeholder — Meridian authenticates via Claude Code SDK
+    apiKey, // Placeholder unless MERIDIAN_API_KEY is enabled on the daemon
     api: "anthropic-messages",
     authHeader: true,
-    headers: {
-      "x-meridian-agent": "pi",
-    },
+    headers: providerHeaders,
     models: [
-      {
-        id: "claude-sonnet-4-5",
-        name: "Claude Sonnet 4.5 (Meridian)",
-        reasoning: true,
-        input: DEFAULT_MODEL_INPUT,
-        cost: SONNET_COST,
-        contextWindow: DEFAULT_CONTEXT_WINDOW,
-        maxTokens: 64000,
-      },
-      {
-        id: "claude-opus-4-5",
-        name: "Claude Opus 4.5 (Meridian)",
-        reasoning: true,
-        input: DEFAULT_MODEL_INPUT,
-        cost: OPUS_COST,
-        contextWindow: DEFAULT_CONTEXT_WINDOW,
-        maxTokens: 64000,
-      },
       {
         id: "claude-sonnet-4-6",
         name: "Claude Sonnet 4.6 (Meridian)",
@@ -391,7 +408,7 @@ export default function (pi: ExtensionAPI) {
         input: DEFAULT_MODEL_INPUT,
         cost: SONNET_COST,
         contextWindow: DEFAULT_CONTEXT_WINDOW,
-        maxTokens: 64000,
+        maxTokens: SONNET_MAX_TOKENS,
       },
       {
         id: "claude-opus-4-6",
@@ -399,8 +416,17 @@ export default function (pi: ExtensionAPI) {
         reasoning: true,
         input: DEFAULT_MODEL_INPUT,
         cost: OPUS_COST,
-        contextWindow: DEFAULT_CONTEXT_WINDOW,
-        maxTokens: 32000,
+        contextWindow: EXTENDED_CONTEXT_WINDOW,
+        maxTokens: OPUS_MAX_TOKENS,
+      },
+      {
+        id: "claude-opus-4-7",
+        name: "Claude Opus 4.7 (Meridian)",
+        reasoning: true,
+        input: DEFAULT_MODEL_INPUT,
+        cost: OPUS_COST,
+        contextWindow: EXTENDED_CONTEXT_WINDOW,
+        maxTokens: OPUS_MAX_TOKENS,
       },
       {
         id: "claude-haiku-4-5",
@@ -409,7 +435,7 @@ export default function (pi: ExtensionAPI) {
         input: DEFAULT_MODEL_INPUT,
         cost: HAIKU_COST,
         contextWindow: DEFAULT_CONTEXT_WINDOW,
-        maxTokens: 8192,
+        maxTokens: HAIKU_MAX_TOKENS,
       },
     ],
   });
@@ -435,7 +461,7 @@ export default function (pi: ExtensionAPI) {
 
     if (event.status === 401 || event.status === 403) {
       ctx.ui.notify(
-        `Meridian auth error (HTTP ${event.status}). Run /meridian to check login status.`,
+        `Meridian auth error (HTTP ${event.status}). Run /meridian to check login status and verify MERIDIAN_API_KEY if API-key auth is enabled.`,
         "error"
       );
     } else if (event.status >= 500) {
@@ -459,15 +485,19 @@ export default function (pi: ExtensionAPI) {
 
       // /meridian start — start the daemon if not running
       if (subcmd === "start") {
-        const { ok: alreadyRunning, health: runningHealth } = await isReachable(baseUrl);
+        const { ok: alreadyRunning, health: runningHealth } = await isReachable(
+          baseUrl,
+          HEALTH_TIMEOUT_MS,
+          requestHeaders
+        );
         if (alreadyRunning && runningHealth) {
           ctx.ui.notify(`Meridian is already running at ${baseUrl}`, "info");
           return;
         }
         ctx.ui.notify(`Starting Meridian on port ${port}...`, "info");
-        const started = await startMeridianDaemon(baseUrl, port);
+        const started = await startMeridianDaemon(baseUrl, port, requestHeaders);
         if (started) {
-          const health = await fetchHealth(baseUrl);
+          const health = await fetchHealth(baseUrl, undefined, requestHeaders);
           if (health.auth?.loggedIn) {
             ctx.ui.notify(
               `✓ Meridian started (${baseUrl}) — ${health.auth.email} (${health.auth.subscriptionType || "unknown"})`,
@@ -493,11 +523,16 @@ export default function (pi: ExtensionAPI) {
       if (subcmd === "version" || subcmd === "update") {
         ctx.ui.notify("Checking Meridian version...", "info");
         const [health, version] = await Promise.all([
-          fetchHealth(baseUrl).catch((): MeridianHealth => ({ status: "unreachable" })),
+          fetchHealth(baseUrl, undefined, requestHeaders).catch(
+            (): MeridianHealth => ({ status: "unreachable" })
+          ),
           checkVersion(),
         ]);
 
         const lines: string[] = [];
+        if (health.version) {
+          lines.push(`Runtime:   v${health.version}`);
+        }
         if (version.installed) {
           lines.push(`Installed: v${version.installed}`);
         } else {
@@ -538,7 +573,7 @@ export default function (pi: ExtensionAPI) {
       // /meridian — health check
       let health: MeridianHealth;
       try {
-        health = await fetchHealth(baseUrl, ctx.signal);
+        health = await fetchHealth(baseUrl, ctx.signal, requestHeaders);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("timed out")) {
@@ -557,17 +592,18 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
-      if (health.status === "healthy" && health.auth?.loggedIn) {
+      if (health.status === "healthy") {
         const lines = [
           `✓ Meridian connected (${baseUrl})`,
-          `  Auth: ${health.auth.email} (${health.auth.subscriptionType || "unknown"})`,
+          ...(health.version ? [`  Version: ${health.version}`] : []),
+          ...(health.auth?.loggedIn
+            ? [`  Auth: ${health.auth.email} (${health.auth.subscriptionType || "unknown"})`]
+            : [`  Auth: ${health.error || "not logged in"}. Run: claude login`]),
           `  Mode: ${health.mode || "unknown"}`,
         ];
-        ctx.ui.notify(lines.join("\n"), "info");
-      } else if (health.status === "healthy") {
         ctx.ui.notify(
-          `Meridian connected but auth issue: ${health.error || "not logged in"}. Run: claude login`,
-          "warning"
+          lines.join("\n"),
+          health.auth?.loggedIn ? "info" : "warning"
         );
       } else if (health.status === "degraded") {
         ctx.ui.notify(
@@ -589,7 +625,7 @@ export default function (pi: ExtensionAPI) {
     if (model?.provider !== "meridian") return;
 
     try {
-      const health = await fetchHealth(baseUrl);
+      const health = await fetchHealth(baseUrl, undefined, requestHeaders);
       if (health.status !== "healthy" || !health.auth?.loggedIn) {
         ctx.ui.notify(
           `Meridian issue: ${health.error || health.status}. Run /meridian for details.`,
@@ -599,7 +635,7 @@ export default function (pi: ExtensionAPI) {
     } catch {
       // Meridian is unreachable — try auto-starting
       ctx.ui.notify(`Meridian not running. Auto-starting...`, "info");
-      const started = await startMeridianDaemon(baseUrl, port);
+      const started = await startMeridianDaemon(baseUrl, port, requestHeaders);
       if (started) {
         ctx.ui.notify(
           `✓ Meridian auto-started at ${baseUrl}`,
