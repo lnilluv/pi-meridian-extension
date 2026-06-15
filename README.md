@@ -6,7 +6,7 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 ## What it does
 
-- **Registers a `meridian` provider** with the current Meridian Claude models (Sonnet 4.6, Opus 4.6, Opus 4.7, Haiku 4.5)
+- **Registers a `meridian` provider** with the current Meridian Claude models (Sonnet 4.6, Opus 4.6, Opus 4.7, Opus 4.8, Haiku 4.5)
 - **Rewrites the system prompt** for Meridian requests to avoid the extra-usage error, preserving project context and working directory
 - **Auto-starts Meridian** on session start if the proxy isn't running
 - **Adds commands**: `/meridian` (health check), `/meridian start`, `/meridian version`
@@ -18,9 +18,10 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 | `meridian/claude-sonnet-4-6` | Claude Sonnet 4.6 |
 | `meridian/claude-opus-4-6` | Claude Opus 4.6 |
 | `meridian/claude-opus-4-7` | Claude Opus 4.7 |
+| `meridian/claude-opus-4-8` | Claude Opus 4.8 |
 | `meridian/claude-haiku-4-5` | Claude Haiku 4.5 |
 
-Use them with `--model`, e.g. `--model meridian/claude-opus-4-7:high`.
+Use them with `--model`, e.g. `--model meridian/claude-opus-4-8:high`.
 
 ## Install
 
@@ -62,13 +63,13 @@ extensions: /path/to/other/extension.ts, /opt/homebrew/lib/node_modules/pi-merid
 After installing, switch your model in pi:
 
 ```
-/model meridian/claude-opus-4-7:high
+/model meridian/claude-opus-4-8:high
 ```
 
 Or use it for a single command:
 
 ```bash
-pi --model meridian/claude-opus-4-7:high
+pi --model meridian/claude-opus-4-8:high
 ```
 
 ## Commands

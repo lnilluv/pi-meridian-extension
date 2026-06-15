@@ -79,6 +79,7 @@ test('provider model catalog matches current upstream Meridian models', async ()
     'claude-sonnet-4-6',
     'claude-opus-4-6',
     'claude-opus-4-7',
+    'claude-opus-4-8',
     'claude-haiku-4-5',
   ]);
 
@@ -86,6 +87,11 @@ test('provider model catalog matches current upstream Meridian models', async ()
   assert.equal(opus47.name, 'Claude Opus 4.7 (Meridian)');
   assert.equal(opus47.contextWindow, 1_000_000);
   assert.equal(opus47.maxTokens, 32768);
+
+  const opus48 = provider.models.find((model) => model.id === 'claude-opus-4-8');
+  assert.equal(opus48.name, 'Claude Opus 4.8 (Meridian)');
+  assert.equal(opus48.contextWindow, 1_000_000);
+  assert.equal(opus48.maxTokens, 32768);
 });
 
 test('/meridian health sends configured auth and profile headers', async (t) => {

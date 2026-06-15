@@ -429,6 +429,15 @@ export default function (pi: ExtensionAPI) {
         maxTokens: OPUS_MAX_TOKENS,
       },
       {
+        id: "claude-opus-4-8",
+        name: "Claude Opus 4.8 (Meridian)",
+        reasoning: true,
+        input: DEFAULT_MODEL_INPUT,
+        cost: OPUS_COST,
+        contextWindow: EXTENDED_CONTEXT_WINDOW,
+        maxTokens: OPUS_MAX_TOKENS,
+      },
+      {
         id: "claude-haiku-4-5",
         name: "Claude Haiku 4.5 (Meridian)",
         reasoning: true,
