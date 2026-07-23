@@ -56,6 +56,26 @@ function getPortFromBaseUrl(baseUrl: string): number {
   }
 }
 
+// A base URL is "local" only when it points at this machine. Auto-spawning a
+// local `meridian` binary makes no sense for a remote target (e.g. a phone
+// pointed at a proxy on another host via MERIDIAN_BASE_URL) — there, an
+// unreachable proxy is a network/remote-daemon issue, not something we can fix
+// by spawning a nonexistent local binary.
+function isLocalBaseUrl(baseUrl: string): boolean {
+  try {
+    const host = new URL(baseUrl).hostname.toLowerCase();
+    return (
+      host === "127.0.0.1" ||
+      host === "localhost" ||
+      host === "::1" ||
+      host === "[::1]" ||
+      host === "0.0.0.0"
+    );
+  } catch {
+    return false;
+  }
+}
+
 function normalizeCwd(cwd: string): string {
   const normalized = cwd.trim().replace(/\\/g, "/");
   return normalized || ".";
@@ -642,19 +662,31 @@ export default function (pi: ExtensionAPI) {
         );
       }
     } catch {
-      // Meridian is unreachable — try auto-starting
-      ctx.ui.notify(`Meridian not running. Auto-starting...`, "info");
-      const started = await startMeridianDaemon(baseUrl, port, requestHeaders);
-      if (started) {
+      // First probe failed. On a remote target this is often a cold-network
+      // false negative (cold DNS/TCP on a phone waking from doze can exceed
+      // HEALTH_TIMEOUT_MS on the very first request), so retry once — a warm
+      // probe resolves in well under the timeout.
+      const warm = await isReachable(baseUrl, HEALTH_TIMEOUT_MS, requestHeaders);
+      if (warm.ok) {
+        // Reachable after warm-up — nothing to do, no spurious error.
+      } else if (!isLocalBaseUrl(baseUrl)) {
+        // Remote target: we can't fix this by spawning a local binary.
         ctx.ui.notify(
-          `✓ Meridian auto-started at ${baseUrl}`,
-          "info"
+          `Meridian unreachable at ${baseUrl} (remote). Check the proxy/tailnet; it will retry on the next request.`,
+          "warning"
         );
       } else {
-        ctx.ui.notify(
-          `Could not auto-start Meridian. Run manually: meridian`,
-          "error"
-        );
+        // Local target: try auto-starting the daemon.
+        ctx.ui.notify(`Meridian not running. Auto-starting...`, "info");
+        const started = await startMeridianDaemon(baseUrl, port, requestHeaders);
+        if (started) {
+          ctx.ui.notify(`✓ Meridian auto-started at ${baseUrl}`, "info");
+        } else {
+          ctx.ui.notify(
+            `Could not auto-start Meridian. Run manually: meridian`,
+            "error"
+          );
+        }
       }
     }
 
