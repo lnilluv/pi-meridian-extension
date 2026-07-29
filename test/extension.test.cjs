@@ -76,12 +76,18 @@ test('provider model catalog matches current upstream Meridian models', async ()
   const provider = pi.providers.get('meridian');
 
   assert.deepEqual(provider.models.map((model) => model.id), [
+    'claude-fable-5',
     'claude-sonnet-4-6',
     'claude-opus-4-6',
     'claude-opus-4-7',
     'claude-opus-4-8',
     'claude-haiku-4-5',
   ]);
+
+  const fable = provider.models.find((model) => model.id === 'claude-fable-5');
+  assert.equal(fable.name, 'Claude Fable 5 (Meridian)');
+  assert.equal(fable.contextWindow, 1_000_000);
+  assert.equal(fable.maxTokens, 128000);
 
   const opus47 = provider.models.find((model) => model.id === 'claude-opus-4-7');
   assert.equal(opus47.name, 'Claude Opus 4.7 (Meridian)');
@@ -92,6 +98,23 @@ test('provider model catalog matches current upstream Meridian models', async ()
   assert.equal(opus48.name, 'Claude Opus 4.8 (Meridian)');
   assert.equal(opus48.contextWindow, 1_000_000);
   assert.equal(opus48.maxTokens, 32768);
+});
+
+test('Fable keeps the full pi orchestration system prompt', async () => {
+  const pi = await registerWithEnv();
+  const beforeProviderRequest = pi.handlers.get('before_provider_request');
+  const payload = { system: 'original payload' };
+  const result = beforeProviderRequest(
+    { payload },
+    {
+      model: { provider: 'meridian', id: 'claude-fable-5' },
+      cwd: '/repo',
+      getSystemPrompt: () => 'full Fable orchestration contract',
+    },
+  );
+
+  assert.equal(result, undefined);
+  assert.equal(payload.system, 'original payload');
 });
 
 test('/meridian health sends configured auth and profile headers', async (t) => {
