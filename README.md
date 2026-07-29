@@ -6,7 +6,7 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 ## What it does
 
-- **Registers a `meridian` provider** with the current Meridian Claude models (Sonnet 4.6, Opus 4.6, Opus 4.7, Opus 4.8, Haiku 4.5)
+- **Registers a `meridian` provider** with the current Meridian Claude models (Fable 5, Sonnet 4.6, Opus 4.6, Opus 4.7, Opus 4.8, Haiku 4.5)
 - **Rewrites the system prompt** for Meridian requests to avoid the extra-usage error, preserving project context and working directory
 - **Auto-starts Meridian** on session start if the proxy isn't running
 - **Adds commands**: `/meridian` (health check), `/meridian start`, `/meridian version`
@@ -15,6 +15,7 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 | ID | Name |
 |----|------|
+| `meridian/claude-fable-5` | Claude Fable 5 |
 | `meridian/claude-sonnet-4-6` | Claude Sonnet 4.6 |
 | `meridian/claude-opus-4-6` | Claude Opus 4.6 |
 | `meridian/claude-opus-4-7` | Claude Opus 4.7 |
@@ -87,4 +88,4 @@ When `provider === "meridian"`, the extension hooks `before_provider_request` an
 3. Preserves `Current date:` and `Current working directory:` lines
 4. Drops pi's heavy default prompt that triggers the extra-usage error
 
-All other providers continue to use pi's default system prompt unchanged.
+Fable 5 also keeps pi's full system prompt because its orchestration contract is compatible with Meridian and must not be reduced to the generic Claude Code prompt. All other providers continue to use pi's default system prompt unchanged.
