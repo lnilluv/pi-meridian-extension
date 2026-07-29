@@ -411,6 +411,8 @@ export default function (pi: ExtensionAPI) {
         cost: FABLE_COST,
         contextWindow: EXTENDED_CONTEXT_WINDOW,
         maxTokens: FABLE_MAX_TOKENS,
+        thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+        compat: { forceAdaptiveThinking: true, supportsStrictTools: true },
       },
       {
         id: "claude-sonnet-4-6",

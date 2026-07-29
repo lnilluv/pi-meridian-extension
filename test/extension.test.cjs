@@ -88,6 +88,11 @@ test('provider model catalog matches current upstream Meridian models', async ()
   assert.equal(fable.name, 'Claude Fable 5 (Meridian)');
   assert.equal(fable.contextWindow, 1_000_000);
   assert.equal(fable.maxTokens, 128000);
+  assert.deepEqual(fable.thinkingLevelMap, { off: null, xhigh: 'xhigh', max: 'max' });
+  assert.deepEqual(fable.compat, {
+    forceAdaptiveThinking: true,
+    supportsStrictTools: true,
+  });
 
   const opus47 = provider.models.find((model) => model.id === 'claude-opus-4-7');
   assert.equal(opus47.name, 'Claude Opus 4.7 (Meridian)');
