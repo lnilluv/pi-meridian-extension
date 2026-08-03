@@ -71,6 +71,23 @@ test('provider defaults to placeholder api key and omits blank profile', async (
   assert.deepEqual(provider.headers, { 'x-meridian-agent': 'pi' });
 });
 
+test('Meridian prompt treats the latest user message as actionable input', async () => {
+  const pi = await registerWithEnv();
+  const handler = pi.handlers.get('before_provider_request');
+  const result = handler(
+    { payload: { messages: [{ role: 'user', content: 'continue' }] } },
+    {
+      model: { provider: 'meridian' },
+      cwd: '/tmp/project',
+      getSystemPrompt: () => 'Current date: 2026-08-03\nCurrent working directory: /tmp/project',
+    }
+  );
+
+  assert.match(result.system, /latest message has role `user`/);
+  assert.match(result.system, /Never claim there is no new question/);
+  assert.match(result.system, /unless the user explicitly asked you to wait or do nothing/);
+});
+
 test('provider model catalog matches current upstream Meridian models', async () => {
   const pi = await registerWithEnv();
   const provider = pi.providers.get('meridian');
