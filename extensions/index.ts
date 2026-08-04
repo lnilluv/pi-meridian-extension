@@ -1,7 +1,7 @@
 import type {
 	ExtensionAPI,
 	ProviderModelConfig,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import { spawn, exec as execCallback } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";

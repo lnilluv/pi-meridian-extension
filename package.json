@@ -1,6 +1,6 @@
 {
   "name": "pi-meridian-extension",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Meridian proxy provider for pi — use your Claude Max subscription through the Meridian local proxy",
   "type": "module",
   "scripts": {
@@ -17,9 +17,10 @@
     "url": "https://github.com/lnilluv/pi-meridian-extension"
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": ">=0.73.1"
+    "@earendil-works/pi-coding-agent": "*"
   },
   "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.81.1",
     "@mariozechner/jiti": "2.6.5",
     "typescript": "5.9.3"
   },

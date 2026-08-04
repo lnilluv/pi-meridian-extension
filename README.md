@@ -1,6 +1,6 @@
 # pi-meridian-extension
 
-Use your **Claude Max subscription** through [pi](https://github.com/mariozechner/pi-coding-agent) via [Meridian](https://github.com/rynfar/meridian) — a local proxy that bridges the Anthropic Messages API with Claude Code SDK authentication.
+Use your **Claude Max subscription** through [pi](https://github.com/earendil-works/pi) via [Meridian](https://github.com/rynfar/meridian) — a local proxy that bridges the Anthropic Messages API with Claude Code SDK authentication.
 
 Without this extension, pi's default system prompt triggers an `"You're out of extra usage"` error on Claude Opus 4.6 (and potentially other models) when routed through Meridian. This extension rewrites the system prompt **only for Meridian requests** to avoid that issue, while leaving all other providers untouched.
 
@@ -34,7 +34,7 @@ Opus and Fable models advertise Meridian's 1M context tier. Meridian may fall ba
 pi install npm:pi-meridian-extension
 ```
 
-Requires pi 0.73.1 or newer and [Meridian](https://github.com/rynfar/meridian) 1.60.0 or newer installed globally:
+Requires pi 0.81.1 or newer and [Meridian](https://github.com/rynfar/meridian) 1.60.0 or newer installed globally:
 
 ```bash
 npm install -g @rynfar/meridian

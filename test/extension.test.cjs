@@ -179,14 +179,22 @@ test("provider model catalog matches Meridian 1.60", async () => {
 	]);
 });
 
-test("package supports the current published pi release", () => {
+test("package uses the current Pi host package", () => {
+	assert.equal(
+		packageJson.peerDependencies["@earendil-works/pi-coding-agent"],
+		"*",
+	);
+	assert.equal(
+		packageJson.devDependencies["@earendil-works/pi-coding-agent"],
+		"0.81.1",
+	);
 	assert.equal(
 		packageJson.peerDependencies["@mariozechner/pi-coding-agent"],
-		">=0.73.1",
+		undefined,
 	);
 });
 
-test("Claude 5 requests use adaptive thinking on pi 0.73", async () => {
+test("Claude 5 requests convert legacy budget thinking to adaptive", async () => {
 	const pi = await registerWithEnv();
 	pi.thinkingLevel = "xhigh";
 	const beforeProviderRequest = pi.handlers.get("before_provider_request");
