@@ -6,7 +6,7 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 ## What it does
 
-- **Registers a `meridian` provider** with the current Meridian Claude models (Sonnet 4.6, Opus 4.6, Opus 4.7, Opus 4.8, Haiku 4.5)
+- **Registers a `meridian` provider** with the current Meridian Claude models, including Sonnet 5, Opus 5, and Fable 5
 - **Rewrites the system prompt** for Meridian requests to avoid the extra-usage error, preserving project context and working directory
 - **Auto-starts Meridian** on session start if the proxy isn't running
 - **Adds commands**: `/meridian` (health check), `/meridian start`, `/meridian version`
@@ -15,13 +15,18 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 | ID | Name |
 |----|------|
+| `meridian/claude-sonnet-5` | Claude Sonnet 5 |
 | `meridian/claude-sonnet-4-6` | Claude Sonnet 4.6 |
+| `meridian/claude-opus-5` | Claude Opus 5 |
 | `meridian/claude-opus-4-6` | Claude Opus 4.6 |
 | `meridian/claude-opus-4-7` | Claude Opus 4.7 |
 | `meridian/claude-opus-4-8` | Claude Opus 4.8 |
+| `meridian/claude-fable-5` | Claude Fable 5 |
 | `meridian/claude-haiku-4-5` | Claude Haiku 4.5 |
 
-Use them with `--model`, e.g. `--model meridian/claude-opus-4-8:high`.
+Use them with `--model`, e.g. `--model meridian/claude-opus-5:high`.
+
+Opus and Fable models advertise Meridian's 1M context tier. Meridian may fall back to 200k when the active Claude subscription cannot use extended context.
 
 ## Install
 
@@ -29,7 +34,7 @@ Use them with `--model`, e.g. `--model meridian/claude-opus-4-8:high`.
 pi install npm:pi-meridian-extension
 ```
 
-Requires [Meridian](https://github.com/rynfar/meridian) installed globally:
+Requires pi 0.73.1 or newer and [Meridian](https://github.com/rynfar/meridian) 1.60.0 or newer installed globally:
 
 ```bash
 npm install -g @rynfar/meridian
@@ -63,13 +68,13 @@ extensions: /path/to/other/extension.ts, /opt/homebrew/lib/node_modules/pi-merid
 After installing, switch your model in pi:
 
 ```
-/model meridian/claude-opus-4-8:high
+/model meridian/claude-opus-5:high
 ```
 
 Or use it for a single command:
 
 ```bash
-pi --model meridian/claude-opus-4-8:high
+pi --model meridian/claude-opus-5:high
 ```
 
 ## Commands
