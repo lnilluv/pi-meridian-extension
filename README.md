@@ -8,6 +8,7 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 - **Registers a `meridian` provider** with the current Meridian Claude models, including Sonnet 5, Opus 5, and Fable 5
 - **Rewrites the system prompt** for Meridian requests to avoid the extra-usage error, preserving project context and working directory
+- **Pins each pi session to a Meridian session** so tool-result turns resume the SDK session and preserve prompt-cache hits
 - **Auto-starts Meridian** on session start if the proxy isn't running
 - **Adds commands**: `/meridian` (health check), `/meridian start`, `/meridian version`
 

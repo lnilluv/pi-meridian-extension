@@ -603,6 +603,15 @@ export default function (pi: ExtensionAPI) {
 		models: MERIDIAN_MODELS,
 	});
 
+	// Meridian treats headerless client-driven tool loops as independent requests,
+	// which starts a fresh SDK session and replays the full prompt on every tool
+	// result. Pin all requests from this pi session to the same Meridian session so
+	// continuation turns resume the SDK session and preserve its prompt cache.
+	pi.on("before_provider_headers", (event, ctx) => {
+		if (ctx.model?.provider !== "meridian") return;
+		event.headers["x-session-affinity"] = ctx.sessionManager.getSessionId();
+	});
+
 	pi.on("before_provider_request", (event, ctx) => {
 		if (ctx.model?.provider !== "meridian") return;
 

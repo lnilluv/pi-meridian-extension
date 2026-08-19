@@ -76,6 +76,29 @@ test("provider defaults to placeholder api key and omits blank profile", async (
 	assert.deepEqual(provider.headers, { "x-meridian-agent": "pi" });
 });
 
+test("provider sends stable pi session affinity to Meridian", async () => {
+	const pi = await registerWithEnv();
+	const beforeProviderHeaders = pi.handlers.get("before_provider_headers");
+	const headers = { "x-meridian-agent": "pi" };
+	const context = {
+		model: { provider: "meridian", id: "claude-opus-5" },
+		sessionManager: { getSessionId: () => "pi-session-123" },
+	};
+
+	await beforeProviderHeaders({ headers }, context);
+	assert.equal(headers["x-session-affinity"], "pi-session-123");
+
+	const otherHeaders = {};
+	await beforeProviderHeaders(
+		{ headers: otherHeaders },
+		{
+			...context,
+			model: { provider: "anthropic", id: "claude-opus-5" },
+		},
+	);
+	assert.deepEqual(otherHeaders, {});
+});
+
 test("provider model catalog matches Meridian 1.60", async () => {
 	const pi = await registerWithEnv();
 	const provider = pi.providers.get("meridian");
