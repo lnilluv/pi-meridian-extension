@@ -736,6 +736,11 @@ export default function (pi: ExtensionAPI) {
 							`Meridian is draining: ${describeHealthIssue(runningHealth)}`,
 							"warning",
 						);
+					} else if (runningHealth.status !== "healthy") {
+						ctx.ui.notify(
+							`Meridian ${runningHealth.status}: ${describeHealthIssue(runningHealth)}`,
+							"warning",
+						);
 					} else {
 						let warningShown = false;
 						if (modeWarning) {
@@ -760,22 +765,29 @@ export default function (pi: ExtensionAPI) {
 				);
 				if (started) {
 					const health = await fetchHealth(baseUrl, undefined, requestHeaders);
-					const modeWarning = getPassthroughWarning(health);
-					if (health.auth?.loggedIn) {
+					if (health.status !== "healthy") {
 						ctx.ui.notify(
-							`✓ Meridian started (${baseUrl}) — ${health.auth.email} (${health.auth.subscriptionType || "unknown"})`,
-							"info",
-						);
-					} else {
-						ctx.ui.notify(
-							`✓ Meridian started (${baseUrl}) — not logged in, run: claude login`,
+							`Meridian ${health.status}: ${describeHealthIssue(health)}`,
 							"warning",
 						);
-					}
-					const versionWarning = getMinimumVersionWarning(health.version);
-					if (modeWarning) ctx.ui.notify(modeWarning, "warning");
-					if (versionWarning) {
-						ctx.ui.notify(versionWarning, "warning");
+					} else {
+						const modeWarning = getPassthroughWarning(health);
+						if (health.auth?.loggedIn) {
+							ctx.ui.notify(
+								`✓ Meridian started (${baseUrl}) — ${health.auth.email} (${health.auth.subscriptionType || "unknown"})`,
+								"info",
+							);
+						} else {
+							ctx.ui.notify(
+								`✓ Meridian started (${baseUrl}) — not logged in, run: claude login`,
+								"warning",
+							);
+						}
+						const versionWarning = getMinimumVersionWarning(health.version);
+						if (modeWarning) ctx.ui.notify(modeWarning, "warning");
+						if (versionWarning) {
+							ctx.ui.notify(versionWarning, "warning");
+						}
 					}
 				} else {
 					// spawn error details were captured in startMeridianDaemon
