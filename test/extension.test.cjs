@@ -624,6 +624,42 @@ test("/meridian health warns when Pi passthrough is disabled", async (t) => {
 	assert.match(notifications[0].message, /Pi-owned tools are not forwarded/);
 });
 
+test("/meridian start preserves passthrough and version warnings", async (t) => {
+	const originalFetch = global.fetch;
+	t.after(() => {
+		global.fetch = originalFetch;
+	});
+
+	global.fetch = async () => ({
+		ok: true,
+		status: 200,
+		text: async () =>
+			JSON.stringify({
+				status: "healthy",
+				version: "1.59.0",
+				mode: "internal",
+				auth: { loggedIn: true, email: "user@example.com" },
+			}),
+	});
+
+	const pi = await registerWithEnv();
+	const notifications = [];
+	await pi.commands.get("meridian").handler("start", {
+		signal: new AbortController().signal,
+		ui: {
+			notify(message, level) {
+				notifications.push({ message, level });
+			},
+		},
+	});
+
+	assert.equal(notifications.length, 2);
+	assert.match(notifications[0].message, /Pi-owned tools are not forwarded/);
+	assert.equal(notifications[0].level, "warning");
+	assert.match(notifications[1].message, /requires Meridian >=1.60.0/);
+	assert.equal(notifications[1].level, "warning");
+});
+
 test("/meridian health displays runtime version when available", async (t) => {
 	const originalFetch = global.fetch;
 	t.after(() => {
