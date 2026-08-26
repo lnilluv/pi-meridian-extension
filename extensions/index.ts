@@ -330,7 +330,12 @@ interface MeridianHealth {
 		subscriptionType?: string;
 	};
 	mode?: string;
+	message?: string;
 	error?: string;
+}
+
+function describeHealthIssue(health: MeridianHealth): string {
+	return health.message || health.error || health.status;
 }
 
 async function fetchHealth(
@@ -374,7 +379,7 @@ async function fetchHealth(
 			};
 		}
 		if (!response.ok && !health.error) {
-			health.error = `HTTP ${response.status}`;
+			health.error = health.message || `HTTP ${response.status}`;
 		}
 		return health;
 	} catch (err) {
@@ -719,7 +724,14 @@ export default function (pi: ExtensionAPI) {
 					requestHeaders,
 				);
 				if (alreadyRunning && runningHealth) {
-					ctx.ui.notify(`Meridian is already running at ${baseUrl}`, "info");
+					if (runningHealth.status === "draining") {
+						ctx.ui.notify(
+							`Meridian is draining: ${describeHealthIssue(runningHealth)}`,
+							"warning",
+						);
+					} else {
+						ctx.ui.notify(`Meridian is already running at ${baseUrl}`, "info");
+					}
 					return;
 				}
 				ctx.ui.notify(`Starting Meridian on port ${port}...`, "info");
@@ -794,7 +806,13 @@ export default function (pi: ExtensionAPI) {
 
 				const running = health.status !== "unreachable";
 				lines.push("");
-				lines.push(running ? `Running at ${baseUrl}` : `Not running`);
+				lines.push(
+					health.status === "draining"
+						? `Draining at ${baseUrl}`
+						: running
+							? `Running at ${baseUrl}`
+							: `Not running`,
+				);
 				if (runtimeWarning) {
 					lines.push("");
 					lines.push(`⚠ ${runtimeWarning}`);
@@ -802,7 +820,11 @@ export default function (pi: ExtensionAPI) {
 
 				ctx.ui.notify(
 					lines.join("\n"),
-					version.updateAvailable || runtimeWarning ? "warning" : "info",
+					health.status === "draining" ||
+						version.updateAvailable ||
+						runtimeWarning
+						? "warning"
+						: "info",
 				);
 				return;
 			}
@@ -857,14 +879,19 @@ export default function (pi: ExtensionAPI) {
 					lines.join("\n"),
 					health.auth?.loggedIn && !versionWarning ? "info" : "warning",
 				);
+			} else if (health.status === "draining") {
+				ctx.ui.notify(
+					`Meridian is draining: ${describeHealthIssue(health)}`,
+					"warning",
+				);
 			} else if (health.status === "degraded") {
 				ctx.ui.notify(
-					`Meridian degraded: ${health.error || "unknown"}`,
+					`Meridian degraded: ${describeHealthIssue(health)}`,
 					"warning",
 				);
 			} else {
 				ctx.ui.notify(
-					`Meridian unhealthy: ${health.error || health.status}`,
+					`Meridian unhealthy: ${describeHealthIssue(health)}`,
 					"error",
 				);
 			}
@@ -879,9 +906,14 @@ export default function (pi: ExtensionAPI) {
 		try {
 			const health = await fetchHealth(baseUrl, undefined, requestHeaders);
 			const versionWarning = getMinimumVersionWarning(health.version);
-			if (health.status !== "healthy" || !health.auth?.loggedIn) {
+			if (health.status === "draining") {
 				ctx.ui.notify(
-					`Meridian issue: ${health.error || health.status}. Run /meridian for details.`,
+					`Meridian is draining: ${describeHealthIssue(health)}`,
+					"warning",
+				);
+			} else if (health.status !== "healthy" || !health.auth?.loggedIn) {
+				ctx.ui.notify(
+					`Meridian issue: ${describeHealthIssue(health)}. Run /meridian for details.`,
 					"warning",
 				);
 			} else if (versionWarning) {
