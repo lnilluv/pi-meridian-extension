@@ -51,7 +51,7 @@ npm install -g @rynfar/meridian
 
 ### Passthrough behavior
 
-The extension identifies Pi with `x-meridian-agent: pi`. Meridian's Pi adapter uses passthrough by default: Pi executes its own tools and Meridian forwards the tool calls. Claude.ai MCP connectors are intentionally unavailable in passthrough because those tools run inside the proxy process, not in Pi. The `/meridian` health command warns when the daemon is running in internal mode.
+The extension identifies Pi with `x-meridian-agent: pi`. Meridian's Pi adapter uses passthrough by default: Pi executes its own tools and Meridian forwards the tool calls. Claude.ai MCP connectors are intentionally unavailable in passthrough because those tools run inside the proxy process, not in Pi. The `/meridian` health command warns when a healthy daemon reports internal mode.
 
 ## Subagent Compatibility
 
