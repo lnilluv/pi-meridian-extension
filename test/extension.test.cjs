@@ -53,6 +53,83 @@ async function registerWithEnv(env = {}) {
 	}
 }
 
+test("custom-port start passes the URL port through MERIDIAN_PORT", async (t) => {
+	const childProcess = require("node:child_process");
+	const originalSpawn = childProcess.spawn;
+	const originalFetch = global.fetch;
+	const spawned = [];
+	let healthCalls = 0;
+
+	t.after(() => {
+		childProcess.spawn = originalSpawn;
+		global.fetch = originalFetch;
+	});
+
+	childProcess.spawn = (command, args, options) => {
+		spawned.push({ command, args, options });
+		return {
+			unref() {},
+			on() {
+				return this;
+			},
+		};
+	};
+	global.fetch = async () => {
+		healthCalls += 1;
+		if (healthCalls === 1) throw new Error("connection refused");
+		return {
+			ok: true,
+			status: 200,
+			text: async () =>
+				JSON.stringify({
+					status: "healthy",
+					mode: "passthrough",
+					auth: {
+						loggedIn: true,
+						email: "user@example.com",
+						subscriptionType: "max",
+					},
+				}),
+		};
+	};
+
+	const pi = await registerWithEnv({
+		MERIDIAN_BASE_URL: "http://127.0.0.1:3457",
+	});
+	const notifications = [];
+	await pi.commands.get("meridian").handler("start", {
+		signal: new AbortController().signal,
+		ui: {
+			notify(message, level) {
+				notifications.push({ message, level });
+			},
+		},
+	});
+
+	assert.equal(spawned.length, 1);
+	assert.equal(spawned[0].command, "meridian");
+	assert.deepEqual(spawned[0].args, []);
+	assert.equal(spawned[0].options.env.MERIDIAN_PORT, "3457");
+	assert.equal(notifications.at(-1).level, "info");
+
+	for (const [baseUrl, expectedPort] of [
+		["http://127.0.0.1:80", "80"],
+		["https://127.0.0.1:443", "443"],
+	]) {
+		spawned.length = 0;
+		healthCalls = 0;
+		const defaultSchemePi = await registerWithEnv({
+			MERIDIAN_BASE_URL: baseUrl,
+		});
+		await defaultSchemePi.commands.get("meridian").handler("start", {
+			signal: new AbortController().signal,
+			ui: { notify() {} },
+		});
+		assert.equal(spawned.length, 1);
+		assert.equal(spawned[0].options.env.MERIDIAN_PORT, expectedPort);
+	}
+});
+
 test("provider uses MERIDIAN_API_KEY and MERIDIAN_PROFILE when configured", async () => {
 	const pi = await registerWithEnv({
 		MERIDIAN_API_KEY: "secret-key",

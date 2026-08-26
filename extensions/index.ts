@@ -214,9 +214,15 @@ function getMeridianRequestHeaders(): Record<string, string> {
 	};
 }
 
+const EXPLICIT_PORT_REGEX =
+	/^[a-z][a-z\d+.-]*:\/\/(?:[^/?#@]*@)?(?:\[[^\]]+\]|[^/?#:]+):(\d+)(?:[/?#]|$)/i;
+
 function getPortFromBaseUrl(baseUrl: string): number {
 	try {
-		return Number(new URL(baseUrl).port) || DEFAULT_PORT;
+		const url = new URL(baseUrl);
+		// URL.port omits explicit scheme-default ports such as http:80.
+		const explicitPort = EXPLICIT_PORT_REGEX.exec(baseUrl.trim())?.[1];
+		return Number(url.port || explicitPort) || DEFAULT_PORT;
 	} catch {
 		return DEFAULT_PORT;
 	}
@@ -410,10 +416,13 @@ async function startMeridianDaemon(
 		try {
 			await new Promise<void>((resolveSpawn) => {
 				try {
-					const child = spawn("meridian", ["--port", String(port)], {
+					const child = spawn("meridian", [], {
 						detached: true,
 						stdio: "ignore",
-						env: process.env,
+						env: {
+							...process.env,
+							MERIDIAN_PORT: String(port),
+						},
 					});
 
 					child.unref();
