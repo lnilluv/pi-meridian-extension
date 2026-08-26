@@ -153,7 +153,7 @@ test("provider defaults to placeholder api key and omits blank profile", async (
 	assert.deepEqual(provider.headers, { "x-meridian-agent": "pi" });
 });
 
-test("provider model catalog matches Meridian 1.60", async () => {
+test("provider model catalog uses safe context defaults before refresh", async () => {
 	const pi = await registerWithEnv();
 	const provider = pi.providers.get("meridian");
 
@@ -209,7 +209,7 @@ test("provider model catalog matches Meridian 1.60", async () => {
 			thinkingLevelMap: { xhigh: "xhigh" },
 			input: ["text", "image"],
 			cost: opusCost,
-			contextWindow: 1_000_000,
+			contextWindow: 200_000,
 			maxTokens: 128_000,
 		},
 		...[
@@ -231,7 +231,7 @@ test("provider model catalog matches Meridian 1.60", async () => {
 			thinkingLevelMap,
 			input: ["text", "image"],
 			cost: opusCost,
-			contextWindow: 1_000_000,
+			contextWindow: 200_000,
 			maxTokens: 128_000,
 		})),
 		{
@@ -241,7 +241,7 @@ test("provider model catalog matches Meridian 1.60", async () => {
 			thinkingLevelMap: { off: null, xhigh: "xhigh" },
 			input: ["text", "image"],
 			cost: fableCost,
-			contextWindow: 1_000_000,
+			contextWindow: 200_000,
 			maxTokens: 128_000,
 		},
 		{
@@ -254,6 +254,94 @@ test("provider model catalog matches Meridian 1.60", async () => {
 			maxTokens: 64_000,
 		},
 	]);
+});
+
+test("model refresh applies Meridian's account-aware context windows", async (t) => {
+	const originalFetch = global.fetch;
+	const requests = [];
+	t.after(() => {
+		global.fetch = originalFetch;
+	});
+
+	global.fetch = async (url, init) => {
+		requests.push({ url, init });
+		return {
+			ok: true,
+			status: 200,
+			json: async () => ({
+				data: [
+					{ id: "claude-opus-5", context_window: 1_000_000 },
+					{ id: "claude-fable-5", context_window: 1_000_000 },
+					{ id: "claude-sonnet-5", context_window: 200_000 },
+				],
+			}),
+		};
+	};
+
+	const pi = await registerWithEnv();
+	const provider = pi.providers.get("meridian");
+	const models = await provider.refreshModels({
+		allowNetwork: true,
+		signal: new AbortController().signal,
+		store: {},
+	});
+
+	assert.equal(requests.length, 1);
+	assert.equal(requests[0].url, "http://127.0.0.1:3456/v1/models");
+	assert.equal(requests[0].init.headers.Authorization, "Bearer meridian");
+	assert.equal(
+		models.find(({ id }) => id === "claude-opus-5").contextWindow,
+		1_000_000,
+	);
+	assert.equal(
+		models.find(({ id }) => id === "claude-fable-5").contextWindow,
+		1_000_000,
+	);
+	assert.equal(
+		models.find(({ id }) => id === "claude-opus-4-6").contextWindow,
+		200_000,
+	);
+});
+
+test("model refresh falls back to safe defaults when the catalog is unavailable", async (t) => {
+	const originalFetch = global.fetch;
+	t.after(() => {
+		global.fetch = originalFetch;
+	});
+
+	global.fetch = async () => ({ ok: false, status: 503 });
+	const pi = await registerWithEnv();
+	const provider = pi.providers.get("meridian");
+	const refreshContext = {
+		allowNetwork: true,
+		signal: new AbortController().signal,
+		store: {},
+	};
+
+	await assert.rejects(
+		provider.refreshModels(refreshContext),
+		/Meridian model catalog request failed: HTTP 503/,
+	);
+
+	const fallback = await provider.refreshModels({
+		...refreshContext,
+		allowNetwork: false,
+	});
+	assert.equal(
+		fallback.find(({ id }) => id === "claude-opus-5").contextWindow,
+		200_000,
+	);
+
+	const aborted = new AbortController();
+	aborted.abort();
+	const abortedFallback = await provider.refreshModels({
+		...refreshContext,
+		signal: aborted.signal,
+	});
+	assert.equal(
+		abortedFallback.find(({ id }) => id === "claude-fable-5").contextWindow,
+		200_000,
+	);
 });
 
 test("package uses the current Pi host package", () => {

@@ -18,7 +18,6 @@ const STARTUP_WAIT_MS = 6000;
 const STARTUP_POLL_MS = 500;
 const DEFAULT_MODEL_INPUT: ("text" | "image")[] = ["text", "image"];
 const DEFAULT_CONTEXT_WINDOW = 200000;
-const EXTENDED_CONTEXT_WINDOW = 1000000;
 const SONNET_COST = {
 	input: 3,
 	output: 15,
@@ -92,7 +91,7 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		thinkingLevelMap: { xhigh: "xhigh" },
 		input: DEFAULT_MODEL_INPUT,
 		cost: OPUS_COST,
-		contextWindow: EXTENDED_CONTEXT_WINDOW,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: 128_000,
 	},
 	{
@@ -102,7 +101,7 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		thinkingLevelMap: { xhigh: "max" },
 		input: DEFAULT_MODEL_INPUT,
 		cost: OPUS_COST,
-		contextWindow: EXTENDED_CONTEXT_WINDOW,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: 128_000,
 	},
 	{
@@ -112,7 +111,7 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		thinkingLevelMap: { xhigh: "xhigh" },
 		input: DEFAULT_MODEL_INPUT,
 		cost: OPUS_COST,
-		contextWindow: EXTENDED_CONTEXT_WINDOW,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: 128_000,
 	},
 	{
@@ -122,7 +121,7 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		thinkingLevelMap: { xhigh: "xhigh" },
 		input: DEFAULT_MODEL_INPUT,
 		cost: OPUS_COST,
-		contextWindow: EXTENDED_CONTEXT_WINDOW,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: 128_000,
 	},
 	{
@@ -132,7 +131,7 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		thinkingLevelMap: { off: null, xhigh: "xhigh" },
 		input: DEFAULT_MODEL_INPUT,
 		cost: FABLE_COST,
-		contextWindow: EXTENDED_CONTEXT_WINDOW,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: 128_000,
 	},
 	{
@@ -148,6 +147,40 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseModelCatalogContextWindows(value: unknown): Map<string, number> {
+	if (!isRecord(value) || !Array.isArray(value.data)) {
+		throw new Error("Meridian model catalog has an invalid shape");
+	}
+
+	const contextWindows = new Map<string, number>();
+	for (const entry of value.data) {
+		if (!isRecord(entry)) continue;
+		if (typeof entry.id !== "string") continue;
+		if (
+			typeof entry.context_window !== "number" ||
+			!Number.isSafeInteger(entry.context_window) ||
+			entry.context_window <= 0
+		) {
+			continue;
+		}
+		contextWindows.set(entry.id, entry.context_window);
+	}
+
+	if (contextWindows.size === 0) {
+		throw new Error("Meridian model catalog has no usable context windows");
+	}
+	return contextWindows;
+}
+
+function applyModelCatalogContextWindows(
+	contextWindows: Map<string, number>,
+): ProviderModelConfig[] {
+	return MERIDIAN_MODELS.map((model) => {
+		const contextWindow = contextWindows.get(model.id);
+		return contextWindow === undefined ? model : { ...model, contextWindow };
+	});
 }
 
 function getAdaptiveEffort(modelId: string, thinkingLevel: string): string {
@@ -610,6 +643,24 @@ export default function (pi: ExtensionAPI) {
 		authHeader: true,
 		headers: providerHeaders,
 		models: MERIDIAN_MODELS,
+		refreshModels: async ({ allowNetwork, signal }) => {
+			if (!allowNetwork || signal?.aborted) return MERIDIAN_MODELS;
+
+			const response = await fetch(`${baseUrl}/v1/models`, {
+				headers: requestHeaders,
+				signal,
+			});
+			if (!response.ok) {
+				throw new Error(
+					`Meridian model catalog request failed: HTTP ${response.status}`,
+				);
+			}
+
+			const catalog: unknown = await response.json();
+			return applyModelCatalogContextWindows(
+				parseModelCatalogContextWindows(catalog),
+			);
+		},
 	});
 
 	pi.on("before_provider_request", (event, ctx) => {

@@ -26,7 +26,7 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 Use them with `--model`, e.g. `--model meridian/claude-opus-5:high`.
 
-Opus and Fable models advertise Meridian's 1M context tier. Meridian may fall back to 200k when the active Claude subscription cannot use extended context.
+Opus and Fable models start with a conservative 200k context window and refresh from Meridian's `/v1/models` catalog. Eligible subscriptions then advertise the 1M tier; without a successful catalog, the extension keeps the safe 200k baseline. After a successful refresh, Pi retains the last-known catalog during an aborted refresh.
 
 ## Install
 
