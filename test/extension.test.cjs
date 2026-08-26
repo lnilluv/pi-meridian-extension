@@ -660,6 +660,80 @@ test("/meridian start preserves passthrough and version warnings", async (t) => 
 	assert.equal(notifications[1].level, "warning");
 });
 
+test("/meridian start preserves primary diagnostics", async (t) => {
+	const childProcess = require("node:child_process");
+	const originalSpawn = childProcess.spawn;
+	const originalFetch = global.fetch;
+	t.after(() => {
+		childProcess.spawn = originalSpawn;
+		global.fetch = originalFetch;
+	});
+	childProcess.spawn = () => ({
+		unref() {},
+		on() {
+			return this;
+		},
+	});
+
+	global.fetch = async () => ({
+		ok: true,
+		status: 200,
+		text: async () =>
+			JSON.stringify({
+				status: "degraded",
+				message: "Meridian is serving a reduced-capacity pool.",
+			}),
+	});
+
+	let pi = await registerWithEnv();
+	let notifications = [];
+	await pi.commands.get("meridian").handler("start", {
+		signal: new AbortController().signal,
+		ui: {
+			notify(message, level) {
+				notifications.push({ message, level });
+			},
+		},
+	});
+
+	assert.equal(notifications.length, 1);
+	assert.equal(notifications[0].level, "warning");
+	assert.match(notifications[0].message, /Meridian degraded/);
+	assert.match(notifications[0].message, /reduced-capacity pool/);
+
+	let healthCalls = 0;
+	global.fetch = async () => {
+		healthCalls += 1;
+		if (healthCalls === 1) throw new Error("connection refused");
+		return {
+			ok: true,
+			status: 200,
+			text: async () =>
+				JSON.stringify({
+					status: "degraded",
+					message: "Meridian is serving a reduced-capacity pool.",
+					auth: { loggedIn: true, email: "user@example.com" },
+				}),
+		};
+	};
+
+	pi = await registerWithEnv();
+	notifications = [];
+	await pi.commands.get("meridian").handler("start", {
+		signal: new AbortController().signal,
+		ui: {
+			notify(message, level) {
+				notifications.push({ message, level });
+			},
+		},
+	});
+
+	assert.match(notifications[0].message, /Starting Meridian/);
+	assert.equal(notifications[1].level, "warning");
+	assert.match(notifications[1].message, /Meridian degraded/);
+	assert.match(notifications[1].message, /reduced-capacity pool/);
+});
+
 test("/meridian health displays runtime version when available", async (t) => {
 	const originalFetch = global.fetch;
 	t.after(() => {
