@@ -533,6 +533,97 @@ test("/meridian health displays runtime version even when not logged in", async 
 	assert.match(notifications[0].message, /Mode: sdk/);
 });
 
+test("session_start preserves passthrough and version warnings", async (t) => {
+	const originalFetch = global.fetch;
+	const originalPath = process.env.PATH;
+	t.after(() => {
+		global.fetch = originalFetch;
+		process.env.PATH = originalPath;
+	});
+
+	global.fetch = async () => ({
+		ok: true,
+		status: 200,
+		text: async () =>
+			JSON.stringify({
+				status: "healthy",
+				version: "1.59.0",
+				mode: "internal",
+				auth: {
+					loggedIn: true,
+					email: "user@example.com",
+				},
+			}),
+	});
+	process.env.PATH = "";
+
+	const pi = await registerWithEnv();
+	const notifications = [];
+	await pi.handlers.get("session_start")(
+		{},
+		{
+			model: { provider: "meridian" },
+			ui: {
+				notify(message, level) {
+					notifications.push({ message, level });
+				},
+			},
+		},
+	);
+
+	assert.deepEqual(notifications, [
+		{
+			message:
+				"Meridian is running in internal mode; Pi-owned tools are not forwarded. Restart Meridian with passthrough enabled for Pi's normal tool loop.",
+			level: "warning",
+		},
+		{
+			message:
+				"This extension requires Meridian >=1.60.0; runtime v1.59.0 may not support the registered models.",
+			level: "warning",
+		},
+	]);
+});
+
+test("/meridian health warns when Pi passthrough is disabled", async (t) => {
+	const originalFetch = global.fetch;
+	t.after(() => {
+		global.fetch = originalFetch;
+	});
+
+	global.fetch = async () => ({
+		ok: true,
+		status: 200,
+		text: async () =>
+			JSON.stringify({
+				status: "healthy",
+				version: "1.62.7",
+				mode: "internal",
+				auth: {
+					loggedIn: true,
+					email: "user@example.com",
+					subscriptionType: "max",
+				},
+			}),
+	});
+
+	const pi = await registerWithEnv();
+	const notifications = [];
+	await pi.commands.get("meridian").handler("", {
+		signal: new AbortController().signal,
+		ui: {
+			notify(message, level) {
+				notifications.push({ message, level });
+			},
+		},
+	});
+
+	assert.equal(notifications.length, 1);
+	assert.equal(notifications[0].level, "warning");
+	assert.match(notifications[0].message, /Mode: internal/);
+	assert.match(notifications[0].message, /Pi-owned tools are not forwarded/);
+});
+
 test("/meridian health displays runtime version when available", async (t) => {
 	const originalFetch = global.fetch;
 	t.after(() => {
