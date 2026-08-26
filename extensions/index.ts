@@ -338,6 +338,11 @@ function describeHealthIssue(health: MeridianHealth): string {
 	return health.message || health.error || health.status;
 }
 
+function getPassthroughWarning(health: MeridianHealth): string | null {
+	if (health.mode !== "internal") return null;
+	return "Meridian is running in internal mode; Pi-owned tools are not forwarded. Restart Meridian with passthrough enabled for Pi's normal tool loop.";
+}
+
 async function fetchHealth(
 	baseUrl: string,
 	signal?: AbortSignal,
@@ -724,11 +729,14 @@ export default function (pi: ExtensionAPI) {
 					requestHeaders,
 				);
 				if (alreadyRunning && runningHealth) {
+					const modeWarning = getPassthroughWarning(runningHealth);
 					if (runningHealth.status === "draining") {
 						ctx.ui.notify(
 							`Meridian is draining: ${describeHealthIssue(runningHealth)}`,
 							"warning",
 						);
+					} else if (modeWarning) {
+						ctx.ui.notify(modeWarning, "warning");
 					} else {
 						ctx.ui.notify(`Meridian is already running at ${baseUrl}`, "info");
 					}
@@ -742,6 +750,7 @@ export default function (pi: ExtensionAPI) {
 				);
 				if (started) {
 					const health = await fetchHealth(baseUrl, undefined, requestHeaders);
+					const modeWarning = getPassthroughWarning(health);
 					if (health.auth?.loggedIn) {
 						ctx.ui.notify(
 							`✓ Meridian started (${baseUrl}) — ${health.auth.email} (${health.auth.subscriptionType || "unknown"})`,
@@ -754,6 +763,7 @@ export default function (pi: ExtensionAPI) {
 						);
 					}
 					const versionWarning = getMinimumVersionWarning(health.version);
+					if (modeWarning) ctx.ui.notify(modeWarning, "warning");
 					if (versionWarning) {
 						ctx.ui.notify(versionWarning, "warning");
 					}
@@ -862,6 +872,7 @@ export default function (pi: ExtensionAPI) {
 
 			if (health.status === "healthy") {
 				const versionWarning = getMinimumVersionWarning(health.version);
+				const modeWarning = getPassthroughWarning(health);
 				const lines = [
 					`✓ Meridian connected (${baseUrl})`,
 					...(health.version ? [`  Version: ${health.version}`] : []),
@@ -873,11 +884,14 @@ export default function (pi: ExtensionAPI) {
 								`  Auth: ${health.error || "not logged in"}. Run: claude login`,
 							]),
 					`  Mode: ${health.mode || "unknown"}`,
+					...(modeWarning ? [`  Warning: ${modeWarning}`] : []),
 					...(versionWarning ? [`  Warning: ${versionWarning}`] : []),
 				];
 				ctx.ui.notify(
 					lines.join("\n"),
-					health.auth?.loggedIn && !versionWarning ? "info" : "warning",
+					health.auth?.loggedIn && !modeWarning && !versionWarning
+						? "info"
+						: "warning",
 				);
 			} else if (health.status === "draining") {
 				ctx.ui.notify(
@@ -906,6 +920,7 @@ export default function (pi: ExtensionAPI) {
 		try {
 			const health = await fetchHealth(baseUrl, undefined, requestHeaders);
 			const versionWarning = getMinimumVersionWarning(health.version);
+			const modeWarning = getPassthroughWarning(health);
 			if (health.status === "draining") {
 				ctx.ui.notify(
 					`Meridian is draining: ${describeHealthIssue(health)}`,
@@ -916,8 +931,13 @@ export default function (pi: ExtensionAPI) {
 					`Meridian issue: ${describeHealthIssue(health)}. Run /meridian for details.`,
 					"warning",
 				);
-			} else if (versionWarning) {
-				ctx.ui.notify(versionWarning, "warning");
+			} else {
+				if (modeWarning) {
+					ctx.ui.notify(modeWarning, "warning");
+				}
+				if (versionWarning) {
+					ctx.ui.notify(versionWarning, "warning");
+				}
 			}
 		} catch {
 			// Meridian is unreachable — try auto-starting

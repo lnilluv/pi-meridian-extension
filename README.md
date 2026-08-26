@@ -47,6 +47,11 @@ npm install -g @rynfar/meridian
 | `MERIDIAN_BASE_URL` | `http://127.0.0.1:3456` | Meridian proxy URL |
 | `MERIDIAN_API_KEY` | `meridian` | Bearer token sent to Meridian. Set this to the same value as the Meridian daemon when upstream API-key auth is enabled. |
 | `MERIDIAN_PROFILE` | unset | Optional Meridian profile ID sent as `x-meridian-profile` for multi-profile setups. |
+| `MERIDIAN_PASSTHROUGH` | enabled by Meridian's Pi adapter | Keep passthrough enabled so Pi executes its own tools. Setting `0` switches to internal mode and may hide Pi-owned tools. |
+
+### Passthrough behavior
+
+The extension identifies Pi with `x-meridian-agent: pi`. Meridian's Pi adapter uses passthrough by default: Pi executes its own tools and Meridian forwards the tool calls. Claude.ai MCP connectors are intentionally unavailable in passthrough because those tools run inside the proxy process, not in Pi. The `/meridian` health command warns when the daemon is running in internal mode.
 
 ## Subagent Compatibility
 
