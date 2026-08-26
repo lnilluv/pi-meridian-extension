@@ -730,15 +730,25 @@ export default function (pi: ExtensionAPI) {
 				);
 				if (alreadyRunning && runningHealth) {
 					const modeWarning = getPassthroughWarning(runningHealth);
+					const versionWarning = getMinimumVersionWarning(runningHealth.version);
 					if (runningHealth.status === "draining") {
 						ctx.ui.notify(
 							`Meridian is draining: ${describeHealthIssue(runningHealth)}`,
 							"warning",
 						);
-					} else if (modeWarning) {
-						ctx.ui.notify(modeWarning, "warning");
 					} else {
-						ctx.ui.notify(`Meridian is already running at ${baseUrl}`, "info");
+						let warningShown = false;
+						if (modeWarning) {
+							ctx.ui.notify(modeWarning, "warning");
+							warningShown = true;
+						}
+						if (versionWarning) {
+							ctx.ui.notify(versionWarning, "warning");
+							warningShown = true;
+						}
+						if (!warningShown) {
+							ctx.ui.notify(`Meridian is already running at ${baseUrl}`, "info");
+						}
 					}
 					return;
 				}
