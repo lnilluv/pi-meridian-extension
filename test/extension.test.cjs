@@ -572,6 +572,112 @@ test("/meridian health displays runtime version when available", async (t) => {
 	assert.match(notifications[0].message, /Version: 1\.60\.0/);
 });
 
+test("/meridian health explains when Meridian is draining", async (t) => {
+	const originalFetch = global.fetch;
+	t.after(() => {
+		global.fetch = originalFetch;
+	});
+
+	global.fetch = async () => ({
+		ok: false,
+		status: 503,
+		text: async () =>
+			JSON.stringify({
+				status: "draining",
+				version: "1.62.7",
+				message:
+					"Meridian is shutting down; route new requests to another instance.",
+			}),
+	});
+
+	const pi = await registerWithEnv();
+	const notifications = [];
+	await pi.commands.get("meridian").handler("", {
+		signal: new AbortController().signal,
+		ui: {
+			notify(message, level) {
+				notifications.push({ message, level });
+			},
+		},
+	});
+
+	assert.equal(notifications.length, 1);
+	assert.equal(notifications[0].level, "warning");
+	assert.match(notifications[0].message, /Meridian is draining/);
+	assert.match(notifications[0].message, /route new requests to another instance/);
+});
+
+test("/meridian start reports a draining daemon", async (t) => {
+	const originalFetch = global.fetch;
+	t.after(() => {
+		global.fetch = originalFetch;
+	});
+
+	global.fetch = async () => ({
+		ok: false,
+		status: 503,
+		text: async () =>
+			JSON.stringify({
+				status: "draining",
+				message: "Meridian is shutting down",
+			}),
+	});
+
+	const pi = await registerWithEnv();
+	const notifications = [];
+	await pi.commands.get("meridian").handler("start", {
+		signal: new AbortController().signal,
+		ui: {
+			notify(message, level) {
+				notifications.push({ message, level });
+			},
+		},
+	});
+
+	assert.equal(notifications.length, 1);
+	assert.equal(notifications[0].level, "warning");
+	assert.match(notifications[0].message, /Meridian is draining/);
+});
+
+test("/meridian version preserves the draining message", async (t) => {
+	const originalFetch = global.fetch;
+	const originalPath = process.env.PATH;
+	t.after(() => {
+		global.fetch = originalFetch;
+		process.env.PATH = originalPath;
+	});
+
+	global.fetch = async () => ({
+		ok: false,
+		status: 503,
+		text: async () =>
+			JSON.stringify({
+				status: "draining",
+				message: "Meridian is shutting down; route new requests elsewhere.",
+			}),
+	});
+
+	const pi = await registerWithEnv();
+	process.env.PATH = "";
+	const notifications = [];
+	await pi.commands.get("meridian").handler("version", {
+		signal: new AbortController().signal,
+		ui: {
+			notify(message, level) {
+				notifications.push({ message, level });
+			},
+		},
+	});
+
+	assert.equal(notifications.length, 2);
+	assert.equal(notifications[1].level, "warning");
+	assert.match(notifications[1].message, /Draining at/);
+	assert.match(
+		notifications[1].message,
+		/Meridian is shutting down; route new requests elsewhere\./,
+	);
+});
+
 test("/meridian health warns when the runtime is too old", async (t) => {
 	const originalFetch = global.fetch;
 	t.after(() => {
