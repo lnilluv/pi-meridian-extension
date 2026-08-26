@@ -808,7 +808,7 @@ export default function (pi: ExtensionAPI) {
 				lines.push("");
 				lines.push(
 					health.status === "draining"
-						? `Draining at ${baseUrl}`
+						? `Draining at ${baseUrl}: ${describeHealthIssue(health)}`
 						: running
 							? `Running at ${baseUrl}`
 							: `Not running`,
