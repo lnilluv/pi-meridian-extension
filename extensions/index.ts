@@ -18,6 +18,12 @@ const STARTUP_WAIT_MS = 6000;
 const STARTUP_POLL_MS = 500;
 const DEFAULT_MODEL_INPUT: ("text" | "image")[] = ["text", "image"];
 const DEFAULT_CONTEXT_WINDOW = 200000;
+const SONNET_5_COST = {
+	input: 2,
+	output: 10,
+	cacheRead: 0.2,
+	cacheWrite: 2.5,
+} as const;
 const SONNET_COST = {
 	input: 3,
 	output: 15,
@@ -36,6 +42,12 @@ const FABLE_COST = {
 	cacheRead: 1,
 	cacheWrite: 12.5,
 } as const;
+const FABLE_5_1_COST = {
+	input: 10,
+	output: 50,
+	cacheRead: 0.25,
+	cacheWrite: 12.5,
+} as const;
 const HAIKU_COST = {
 	input: 1,
 	output: 5,
@@ -50,6 +62,13 @@ const ADAPTIVE_MODEL_IDS = new Set([
 	"claude-opus-4-7",
 	"claude-opus-4-8",
 	"claude-fable-5",
+	"claude-fable-5-1",
+	"claude-mythos-5-1",
+]);
+const ALWAYS_ON_ADAPTIVE_MODEL_IDS = new Set([
+	"claude-fable-5",
+	"claude-fable-5-1",
+	"claude-mythos-5-1",
 ]);
 const SAMPLING_UNSUPPORTED_MODEL_IDS = new Set([
 	"claude-sonnet-5",
@@ -57,6 +76,12 @@ const SAMPLING_UNSUPPORTED_MODEL_IDS = new Set([
 	"claude-opus-4-7",
 	"claude-opus-4-8",
 	"claude-fable-5",
+	"claude-fable-5-1",
+	"claude-mythos-5-1",
+]);
+const FORCED_TOOL_CHOICE_UNSUPPORTED_MODEL_IDS = new Set([
+	"claude-fable-5-1",
+	"claude-mythos-5-1",
 ]);
 const MAX_EFFORT_MODEL_IDS = new Set([
 	"claude-sonnet-4-6",
@@ -70,7 +95,7 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		reasoning: true,
 		thinkingLevelMap: { xhigh: "xhigh" },
 		input: DEFAULT_MODEL_INPUT,
-		cost: SONNET_COST,
+		cost: SONNET_5_COST,
 		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: 128_000,
 	},
@@ -82,7 +107,7 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		input: DEFAULT_MODEL_INPUT,
 		cost: SONNET_COST,
 		contextWindow: DEFAULT_CONTEXT_WINDOW,
-		maxTokens: 64_000,
+		maxTokens: 128_000,
 	},
 	{
 		id: "claude-opus-5",
@@ -135,6 +160,28 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		maxTokens: 128_000,
 	},
 	{
+		id: "claude-fable-5-1",
+		name: "Claude Fable 5.1 (Meridian)",
+		reasoning: true,
+		thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+		input: DEFAULT_MODEL_INPUT,
+		cost: FABLE_5_1_COST,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
+		maxTokens: 128_000,
+		compat: { forceAdaptiveThinking: true, supportsTemperature: false },
+	},
+	{
+		id: "claude-mythos-5-1",
+		name: "Claude Mythos 5.1 (Meridian)",
+		reasoning: true,
+		thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+		input: DEFAULT_MODEL_INPUT,
+		cost: FABLE_5_1_COST,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
+		maxTokens: 128_000,
+		compat: { forceAdaptiveThinking: true, supportsTemperature: false },
+	},
+	{
 		id: "claude-haiku-4-5",
 		name: "Claude Haiku 4.5 (Meridian)",
 		reasoning: true,
@@ -148,6 +195,14 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+// Meridian 1.66 still advertises the legacy Fable 5 id from /v1/models.
+// These newer ids use the same Fable routing tier, so inherit its account-aware
+// context window until Meridian exposes them directly.
+const MODEL_CATALOG_FALLBACK_IDS: Record<string, string> = {
+	"claude-fable-5-1": "claude-fable-5",
+	"claude-mythos-5-1": "claude-fable-5",
+};
 
 function parseModelCatalogContextWindows(value: unknown): Map<string, number> {
 	if (!isRecord(value) || !Array.isArray(value.data)) {
@@ -178,7 +233,9 @@ function applyModelCatalogContextWindows(
 	contextWindows: Map<string, number>,
 ): ProviderModelConfig[] {
 	return MERIDIAN_MODELS.map((model) => {
-		const contextWindow = contextWindows.get(model.id);
+		const contextWindow =
+			contextWindows.get(model.id) ??
+			contextWindows.get(MODEL_CATALOG_FALLBACK_IDS[model.id]);
 		return contextWindow === undefined ? model : { ...model, contextWindow };
 	});
 }
@@ -204,7 +261,26 @@ function normalizeModelRequest(
 		delete normalized.top_k;
 	}
 
+	if (FORCED_TOOL_CHOICE_UNSUPPORTED_MODEL_IDS.has(modelId)) {
+		const toolChoice = normalized.tool_choice;
+		const toolChoiceType = isRecord(toolChoice)
+			? toolChoice.type
+			: toolChoice;
+		if (toolChoiceType === "any" || toolChoiceType === "tool") {
+			// Fable 5.1 and Mythos 5.1 reject forced tool use. Removing the
+			// choice lets the model decide normally instead of returning a 400.
+			delete normalized.tool_choice;
+		}
+	}
+
 	if (!ADAPTIVE_MODEL_IDS.has(modelId) || !isRecord(normalized.thinking)) {
+		return normalized;
+	}
+	if (normalized.thinking.type === "disabled") {
+		// Fable 5/5.1 and Mythos 5.1 only support always-on adaptive thinking.
+		// Omitting the field selects that mode without sending a 400-inducing
+		// `type: "disabled"` request.
+		if (ALWAYS_ON_ADAPTIVE_MODEL_IDS.has(modelId)) delete normalized.thinking;
 		return normalized;
 	}
 	if (normalized.thinking.type !== "enabled") return normalized;
@@ -644,6 +720,7 @@ export default function (pi: ExtensionAPI) {
 		...providerHeaders,
 		Authorization: `Bearer ${apiKey}`,
 	};
+	let lastKnownModels = MERIDIAN_MODELS;
 
 	// Register the Meridian provider
 	pi.registerProvider("meridian", {
@@ -654,22 +731,30 @@ export default function (pi: ExtensionAPI) {
 		headers: providerHeaders,
 		models: MERIDIAN_MODELS,
 		refreshModels: async ({ allowNetwork, signal }) => {
-			if (!allowNetwork || signal?.aborted) return MERIDIAN_MODELS;
+			if (!allowNetwork || signal?.aborted) return lastKnownModels;
 
-			const response = await fetch(`${baseUrl}/v1/models`, {
-				headers: requestHeaders,
-				signal,
-			});
-			if (!response.ok) {
-				throw new Error(
-					`Meridian model catalog request failed: HTTP ${response.status}`,
+			try {
+				const response = await fetch(`${baseUrl}/v1/models`, {
+					headers: requestHeaders,
+					signal,
+				});
+				if (!response.ok) {
+					throw new Error(
+						`Meridian model catalog request failed: HTTP ${response.status}`,
+					);
+				}
+
+				const catalog: unknown = await response.json();
+				const refreshed = applyModelCatalogContextWindows(
+					parseModelCatalogContextWindows(catalog),
 				);
+				if (signal?.aborted) return lastKnownModels;
+				lastKnownModels = refreshed;
+				return refreshed;
+			} catch (error) {
+				if (signal?.aborted) return lastKnownModels;
+				throw error;
 			}
-
-			const catalog: unknown = await response.json();
-			return applyModelCatalogContextWindows(
-				parseModelCatalogContextWindows(catalog),
-			);
 		},
 	});
 
