@@ -6,7 +6,7 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 ## What it does
 
-- **Registers a `meridian` provider** with the current Meridian Claude models, including Sonnet 5, Opus 5, and Fable 5
+- **Registers a `meridian` provider** with the current Meridian Claude models, including Sonnet 5, Opus 5, Fable 5.1, and Mythos 5.1
 - **Rewrites the system prompt** for Meridian requests to avoid the extra-usage error, preserving project context and working directory
 - **Auto-starts Meridian** on session start if the proxy isn't running
 - **Adds commands**: `/meridian` (health check), `/meridian start`, `/meridian version`
@@ -22,11 +22,15 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 | `meridian/claude-opus-4-7` | Claude Opus 4.7 |
 | `meridian/claude-opus-4-8` | Claude Opus 4.8 |
 | `meridian/claude-fable-5` | Claude Fable 5 |
+| `meridian/claude-fable-5-1` | Claude Fable 5.1 |
+| `meridian/claude-mythos-5-1` | Claude Mythos 5.1 (Project Glasswing) |
 | `meridian/claude-haiku-4-5` | Claude Haiku 4.5 |
 
-Use them with `--model`, e.g. `--model meridian/claude-opus-5:high`.
+Use them with `--model`, e.g. `--model meridian/claude-fable-5-1:xhigh`.
 
-Opus and Fable models start with a conservative 200k context window and refresh from Meridian's `/v1/models` catalog. Eligible subscriptions then advertise the 1M tier; without a successful catalog, the extension keeps the safe 200k baseline. After a successful refresh, Pi retains the last-known catalog during an aborted refresh.
+Mythos 5.1 is invitation-only for Project Glasswing customers. Fable 5.1 and Mythos 5.1 use Anthropic's $10/$50 per-million-token rates and $0.25 per-million-token cache reads. They require adaptive thinking, so the extension removes unsupported sampling fields and forced tool choices.
+
+Opus, Fable, and Mythos models start with a conservative 200k context window and refresh from Meridian's `/v1/models` catalog. Eligible subscriptions then advertise the 1M tier; without a successful catalog, the extension keeps the safe 200k baseline. After a successful refresh, Pi retains the last-known catalog during an aborted refresh.
 
 ## Install
 
