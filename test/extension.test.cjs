@@ -157,7 +157,13 @@ test("provider model catalog uses safe context defaults before refresh", async (
 	const pi = await registerWithEnv();
 	const provider = pi.providers.get("meridian");
 
-	const sonnetCost = {
+	const sonnet5Cost = {
+		input: 2,
+		output: 10,
+		cacheRead: 0.2,
+		cacheWrite: 2.5,
+	};
+	const sonnet46Cost = {
 		input: 3,
 		output: 15,
 		cacheRead: 0.3,
@@ -175,6 +181,12 @@ test("provider model catalog uses safe context defaults before refresh", async (
 		cacheRead: 1,
 		cacheWrite: 12.5,
 	};
+	const fable51Cost = {
+		input: 10,
+		output: 50,
+		cacheRead: 0.25,
+		cacheWrite: 12.5,
+	};
 	const haikuCost = {
 		input: 1,
 		output: 5,
@@ -188,7 +200,7 @@ test("provider model catalog uses safe context defaults before refresh", async (
 			reasoning: true,
 			thinkingLevelMap: { xhigh: "xhigh" },
 			input: ["text", "image"],
-			cost: sonnetCost,
+			cost: sonnet5Cost,
 			contextWindow: 200_000,
 			maxTokens: 128_000,
 		},
@@ -198,9 +210,9 @@ test("provider model catalog uses safe context defaults before refresh", async (
 			reasoning: true,
 			thinkingLevelMap: { xhigh: "max" },
 			input: ["text", "image"],
-			cost: sonnetCost,
+			cost: sonnet46Cost,
 			contextWindow: 200_000,
-			maxTokens: 64_000,
+			maxTokens: 128_000,
 		},
 		{
 			id: "claude-opus-5",
@@ -243,6 +255,28 @@ test("provider model catalog uses safe context defaults before refresh", async (
 			cost: fableCost,
 			contextWindow: 200_000,
 			maxTokens: 128_000,
+		},
+		{
+			id: "claude-fable-5-1",
+			name: "Claude Fable 5.1 (Meridian)",
+			reasoning: true,
+			thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+			input: ["text", "image"],
+			cost: fable51Cost,
+			contextWindow: 200_000,
+			maxTokens: 128_000,
+			compat: { forceAdaptiveThinking: true, supportsTemperature: false },
+		},
+		{
+			id: "claude-mythos-5-1",
+			name: "Claude Mythos 5.1 (Meridian)",
+			reasoning: true,
+			thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+			input: ["text", "image"],
+			cost: fable51Cost,
+			contextWindow: 200_000,
+			maxTokens: 128_000,
+			compat: { forceAdaptiveThinking: true, supportsTemperature: false },
 		},
 		{
 			id: "claude-haiku-4-5",
@@ -298,9 +332,65 @@ test("model refresh applies Meridian's account-aware context windows", async (t)
 		1_000_000,
 	);
 	assert.equal(
+		models.find(({ id }) => id === "claude-fable-5-1").contextWindow,
+		1_000_000,
+	);
+	assert.equal(
+		models.find(({ id }) => id === "claude-mythos-5-1").contextWindow,
+		1_000_000,
+	);
+	assert.equal(
 		models.find(({ id }) => id === "claude-opus-4-6").contextWindow,
 		200_000,
 	);
+
+	const aborted = new AbortController();
+	aborted.abort();
+	const retained = await provider.refreshModels({
+		allowNetwork: true,
+		signal: aborted.signal,
+		store: {},
+	});
+	assert.equal(requests.length, 1);
+	assert.equal(
+		retained.find(({ id }) => id === "claude-fable-5-1").contextWindow,
+		1_000_000,
+	);
+
+	global.fetch = async (url, init) => {
+		requests.push({ url, init });
+		await new Promise((_, reject) => {
+			init.signal.addEventListener(
+				"abort",
+				() => reject(new Error("request aborted")),
+				{ once: true },
+			);
+		});
+	};
+	const inFlightAbort = new AbortController();
+	const inFlightRefresh = provider.refreshModels({
+		allowNetwork: true,
+		signal: inFlightAbort.signal,
+		store: {},
+	});
+	inFlightAbort.abort();
+	const retainedInFlight = await inFlightRefresh;
+	assert.equal(requests.length, 2);
+	assert.equal(
+		retainedInFlight.find(({ id }) => id === "claude-mythos-5-1").contextWindow,
+		1_000_000,
+	);
+
+	const offline = await provider.refreshModels({
+		allowNetwork: false,
+		signal: new AbortController().signal,
+		store: {},
+	});
+	assert.equal(
+		offline.find(({ id }) => id === "claude-mythos-5-1").contextWindow,
+		1_000_000,
+	);
+	assert.equal(requests.length, 2);
 });
 
 test("model refresh falls back to safe defaults when the catalog is unavailable", async (t) => {
@@ -424,6 +514,104 @@ test("adaptive requests preserve output configuration and map minimal effort", a
 	assert.equal("top_k" in payload, false);
 });
 
+test("Fable-tier 5.1 models convert legacy thinking and strip unsupported sampling", async () => {
+	const pi = await registerWithEnv();
+	pi.thinkingLevel = "xhigh";
+	const beforeProviderRequest = pi.handlers.get("before_provider_request");
+
+	for (const modelId of ["claude-fable-5-1", "claude-mythos-5-1"]) {
+		const payload = await beforeProviderRequest(
+			{
+				payload: {
+					model: modelId,
+					thinking: {
+						type: "enabled",
+						budget_tokens: 16_384,
+						display: "summarized",
+					},
+					temperature: 0.7,
+					top_p: 0.8,
+					top_k: 20,
+				},
+			},
+			{
+				model: { provider: "meridian", id: modelId },
+				cwd: "/workspace",
+				getSystemPrompt: () => "system",
+			},
+		);
+
+		assert.deepEqual(payload.thinking, {
+			type: "adaptive",
+			display: "summarized",
+		});
+		assert.deepEqual(payload.output_config, { effort: "xhigh" });
+		assert.equal("temperature" in payload, false);
+		assert.equal("top_p" in payload, false);
+		assert.equal("top_k" in payload, false);
+	}
+});
+
+test("always-on Fable-tier thinking ignores an explicit disabled mode", async () => {
+	const pi = await registerWithEnv();
+	const beforeProviderRequest = pi.handlers.get("before_provider_request");
+
+	for (const modelId of ["claude-fable-5-1", "claude-mythos-5-1"]) {
+		const payload = await beforeProviderRequest(
+			{
+				payload: {
+					model: modelId,
+					thinking: { type: "disabled" },
+				},
+			},
+			{
+				model: { provider: "meridian", id: modelId },
+				cwd: "/workspace",
+				getSystemPrompt: () => "system",
+			},
+		);
+
+		assert.equal("thinking" in payload, false);
+	}
+});
+
+test("Fable-tier 5.1 models remove forced tool choices but preserve normal choices", async () => {
+	const pi = await registerWithEnv();
+	const beforeProviderRequest = pi.handlers.get("before_provider_request");
+
+	for (const modelId of ["claude-fable-5-1", "claude-mythos-5-1"]) {
+		for (const toolChoice of [
+			"any",
+			"tool",
+			{ type: "any" },
+			{ type: "tool", name: "read" },
+		]) {
+			const payload = await beforeProviderRequest(
+				{ payload: { model: modelId, tool_choice: toolChoice } },
+				{
+					model: { provider: "meridian", id: modelId },
+					cwd: "/workspace",
+					getSystemPrompt: () => "system",
+				},
+			);
+
+			assert.equal("tool_choice" in payload, false);
+		}
+
+		const normalChoice = await beforeProviderRequest(
+			{
+				payload: { model: modelId, tool_choice: { type: "auto" } },
+			},
+			{
+				model: { provider: "meridian", id: modelId },
+				cwd: "/workspace",
+				getSystemPrompt: () => "system",
+			},
+		);
+		assert.deepEqual(normalChoice.tool_choice, { type: "auto" });
+	}
+});
+
 test("Claude 4.6 maps pi xhigh thinking to max effort", async () => {
 	const pi = await registerWithEnv();
 	pi.thinkingLevel = "xhigh";
@@ -440,6 +628,34 @@ test("Claude 4.6 maps pi xhigh thinking to max effort", async () => {
 
 	assert.deepEqual(payload.thinking, { type: "adaptive" });
 	assert.deepEqual(payload.output_config, { effort: "max" });
+});
+
+test("non-Meridian requests bypass Meridian normalization", async () => {
+	const pi = await registerWithEnv();
+	const beforeProviderRequest = pi.handlers.get("before_provider_request");
+	const payload = {
+		model: "claude-fable-5-1",
+		thinking: { type: "enabled", budget_tokens: 2_048 },
+		temperature: 0.4,
+		tool_choice: "any",
+	};
+
+	const result = await beforeProviderRequest(
+		{ payload },
+		{
+			model: { provider: "anthropic", id: "claude-fable-5-1" },
+			cwd: "/workspace",
+			getSystemPrompt: () => "original system prompt",
+		},
+	);
+
+	assert.equal(result, undefined);
+	assert.deepEqual(payload, {
+		model: "claude-fable-5-1",
+		thinking: { type: "enabled", budget_tokens: 2_048 },
+		temperature: 0.4,
+		tool_choice: "any",
+	});
 });
 
 test("Haiku request settings are not normalized as adaptive", async () => {
