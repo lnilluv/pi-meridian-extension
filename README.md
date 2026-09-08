@@ -102,5 +102,6 @@ For other Meridian models, the extension hooks `before_provider_request` and rep
 2. Preserves your `# Project Context` section from the original prompt
 3. Preserves `Current date:` and `Current working directory:` lines
 4. Drops pi's heavy default prompt that triggers the extra-usage error
+5. Adds guidance for short user replies and clarification answers, respects requests to wait, and distinguishes tool results from user instructions
 
 All other providers continue to use pi's default system prompt unchanged.
