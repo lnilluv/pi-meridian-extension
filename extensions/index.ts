@@ -337,6 +337,16 @@ function getPortFromBaseUrl(baseUrl: string): number {
 	}
 }
 
+function isLocalBaseUrl(baseUrl: string): boolean {
+	try {
+		const url = new URL(baseUrl);
+		return (url.protocol === "http:" || url.protocol === "https:") &&
+			["127.0.0.1", "localhost", "[::1]", "0.0.0.0"].includes(url.hostname);
+	} catch {
+		return false;
+	}
+}
+
 function normalizeCwd(cwd: string): string {
 	const normalized = cwd.trim().replace(/\\/g, "/");
 	return normalized || ".";
@@ -376,17 +386,26 @@ function extractProjectContextSection(systemPrompt: string): string {
 }
 
 function buildMeridianSafeSystemPrompt(
-	originalSystemPrompt: string,
+	originalSystemPrompt: unknown,
 	cwd: string,
 ): string {
-	const projectContext = extractProjectContextSection(originalSystemPrompt);
+	// Some hosts supply text blocks instead of Pi's flat prompt string.
+	const prompt = typeof originalSystemPrompt === "string"
+		? originalSystemPrompt
+		: Array.isArray(originalSystemPrompt)
+			? originalSystemPrompt.map((part: unknown) => {
+				if (typeof part === "string") return part;
+				return isRecord(part) && typeof part.text === "string" ? part.text : "";
+			}).join("\n")
+			: "";
+	const projectContext = extractProjectContextSection(prompt);
 
 	const currentDateLine =
-		originalSystemPrompt.match(CURRENT_DATE_LINE_REGEX)?.[0] ||
+		prompt.match(CURRENT_DATE_LINE_REGEX)?.[0] ||
 		`Current date: ${new Date().toISOString().slice(0, 10)}`;
 
 	const currentWorkingDirectoryLine =
-		originalSystemPrompt.match(CURRENT_WORKING_DIRECTORY_LINE_REGEX)?.[0] ||
+		prompt.match(CURRENT_WORKING_DIRECTORY_LINE_REGEX)?.[0] ||
 		`Current working directory: ${normalizeCwd(cwd)}`;
 
 	return [
@@ -771,12 +790,17 @@ export default function (pi: ExtensionAPI) {
 			return event.payload;
 		}
 
+		const payload = normalizeModelRequest(
+			event.payload,
+			ctx.model.id,
+			pi.getThinkingLevel(),
+		);
+		// Fable 5 accepts the full orchestration prompt. Keep serialized system
+		// blocks and cache metadata without skipping request normalization.
+		if (ctx.model.id === "claude-fable-5") return payload;
+
 		return {
-			...normalizeModelRequest(
-				event.payload,
-				ctx.model.id,
-				pi.getThinkingLevel(),
-			),
+			...payload,
 			system: buildMeridianSafeSystemPrompt(ctx.getSystemPrompt(), ctx.cwd),
 		};
 	});
@@ -846,6 +870,13 @@ export default function (pi: ExtensionAPI) {
 							ctx.ui.notify(`Meridian is already running at ${baseUrl}`, "info");
 						}
 					}
+					return;
+				}
+				if (!isLocalBaseUrl(baseUrl)) {
+					ctx.ui.notify(
+						`Meridian unreachable at ${baseUrl}. Local startup requires a local URL; check the remote proxy or MERIDIAN_BASE_URL.`,
+						"warning",
+					);
 					return;
 				}
 				ctx.ui.notify(`Starting Meridian on port ${port}...`, "info");
@@ -1053,6 +1084,13 @@ export default function (pi: ExtensionAPI) {
 				}
 			}
 		} catch {
+			if (!isLocalBaseUrl(baseUrl)) {
+				ctx.ui.notify(
+					`Meridian unreachable at ${baseUrl}. Local startup requires a local URL; check the remote proxy or MERIDIAN_BASE_URL.`,
+					"warning",
+				);
+				return;
+			}
 			// Meridian is unreachable — try auto-starting
 			ctx.ui.notify(`Meridian not running. Auto-starting...`, "info");
 			const started = await startMeridianDaemon(baseUrl, port, requestHeaders);
