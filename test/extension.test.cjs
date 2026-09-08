@@ -449,6 +449,35 @@ test("package uses the current Pi host package", () => {
 	);
 });
 
+test("prompt shaping accepts host text blocks and absent prompts (issue #6)", async () => {
+	const pi = await registerWithEnv();
+	const hook = pi.handlers.get("before_provider_request");
+	const lines = [
+		"# Project Context\nKeep project instructions.",
+		"Current date: 2026-08-27",
+		"Current working directory: /project",
+	];
+	for (const prompt of [lines, lines.map(text => ({ type: "text", text })), lines.join("\n")]) {
+		const messages = [{ role: "user", content: "hello" }];
+		const result = await hook({ payload: { messages } }, {
+			model: { provider: "meridian", id: "claude-opus-4-8" },
+			cwd: "/fallback",
+			getSystemPrompt: () => prompt,
+		});
+		for (const line of lines) assert.ok(result.system.includes(line));
+		assert.equal(result.messages, messages);
+	}
+	for (const prompt of [undefined, null, [], [null, { type: "image" }, { text: 42 }]]) {
+		const result = await hook({ payload: {} }, {
+			model: { provider: "meridian", id: "claude-opus-4-8" },
+			cwd: "/fallback",
+			getSystemPrompt: () => prompt,
+		});
+		assert.match(result.system, /Current working directory: \/fallback/);
+		assert.match(result.system, /Current date: \d{4}-\d{2}-\d{2}/);
+	}
+});
+
 test("Claude 5 requests convert legacy budget thinking to adaptive", async () => {
 	const pi = await registerWithEnv();
 	pi.thinkingLevel = "xhigh";

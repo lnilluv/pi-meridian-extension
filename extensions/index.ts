@@ -370,17 +370,26 @@ function extractProjectContextSection(systemPrompt: string): string {
 }
 
 function buildMeridianSafeSystemPrompt(
-	originalSystemPrompt: string,
+	originalSystemPrompt: unknown,
 	cwd: string,
 ): string {
-	const projectContext = extractProjectContextSection(originalSystemPrompt);
+	// Some hosts supply text blocks instead of Pi's flat prompt string.
+	const prompt = typeof originalSystemPrompt === "string"
+		? originalSystemPrompt
+		: Array.isArray(originalSystemPrompt)
+			? originalSystemPrompt.map((part: unknown) => {
+				if (typeof part === "string") return part;
+				return isRecord(part) && typeof part.text === "string" ? part.text : "";
+			}).join("\n")
+			: "";
+	const projectContext = extractProjectContextSection(prompt);
 
 	const currentDateLine =
-		originalSystemPrompt.match(CURRENT_DATE_LINE_REGEX)?.[0] ||
+		prompt.match(CURRENT_DATE_LINE_REGEX)?.[0] ||
 		`Current date: ${new Date().toISOString().slice(0, 10)}`;
 
 	const currentWorkingDirectoryLine =
-		originalSystemPrompt.match(CURRENT_WORKING_DIRECTORY_LINE_REGEX)?.[0] ||
+		prompt.match(CURRENT_WORKING_DIRECTORY_LINE_REGEX)?.[0] ||
 		`Current working directory: ${normalizeCwd(cwd)}`;
 
 	return [
