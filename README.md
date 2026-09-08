@@ -7,9 +7,9 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 ## What it does
 
 - **Registers a `meridian` provider** with the current Meridian Claude models, including Sonnet 5, Opus 5, Fable 5.1, and Mythos 5.1
-- **Rewrites the system prompt** for Meridian requests to avoid the extra-usage error, preserving project context and working directory
+- **Rewrites the system prompt** to avoid the extra-usage error, preserving project context and working directory. Fable 5 keeps its full prompt.
 - **Sends Pi's session ID** as `x-session-affinity` so Meridian can identify tool-result continuations. Explicit affinity headers are preserved.
-- **Auto-starts Meridian** on session start if the proxy isn't running
+- **Auto-starts Meridian** on session start if the local proxy isn't running. Remote URLs never trigger local startup.
 - **Adds commands**: `/meridian` (health check), `/meridian start`, `/meridian version`
 
 ## Models
@@ -90,16 +90,19 @@ pi --model meridian/claude-opus-5:high
 ## Commands
 
 - `/meridian` — health check (connection status, runtime version, auth, mode)
-- `/meridian start` — start the Meridian daemon if not running
+- `/meridian start` — start the local Meridian daemon if not running
 - `/meridian version` — check installed vs latest version, update availability
 
 ## How the prompt rewrite works
 
-When `provider === "meridian"`, the extension hooks `before_provider_request` and replaces the full system prompt with a concise version that:
+For `meridian/claude-fable-5`, the extension preserves the serialized system prompt, including orchestration instructions and cache metadata. Thinking and sampling normalization still applies.
+
+For other Meridian models, the extension hooks `before_provider_request` and replaces the full system prompt with a concise version that:
 
 1. Identifies as Claude Code operating through Meridian for pi
 2. Preserves your `# Project Context` section from the original prompt
 3. Preserves `Current date:` and `Current working directory:` lines
 4. Drops pi's heavy default prompt that triggers the extra-usage error
+5. Adds guidance for short user replies and clarification answers, respects requests to wait, and distinguishes tool results from user instructions
 
 All other providers continue to use pi's default system prompt unchanged.
