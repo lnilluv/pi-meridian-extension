@@ -784,12 +784,17 @@ export default function (pi: ExtensionAPI) {
 			return event.payload;
 		}
 
+		const payload = normalizeModelRequest(
+			event.payload,
+			ctx.model.id,
+			pi.getThinkingLevel(),
+		);
+		// Fable 5 accepts the full orchestration prompt. Keep serialized system
+		// blocks and cache metadata without skipping request normalization.
+		if (ctx.model.id === "claude-fable-5") return payload;
+
 		return {
-			...normalizeModelRequest(
-				event.payload,
-				ctx.model.id,
-				pi.getThinkingLevel(),
-			),
+			...payload,
 			system: buildMeridianSafeSystemPrompt(ctx.getSystemPrompt(), ctx.cwd),
 		};
 	});

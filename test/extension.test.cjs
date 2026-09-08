@@ -517,6 +517,34 @@ test("prompt shaping accepts host text blocks and absent prompts (issue #6)", as
 	}
 });
 
+test("Fable 5 preserves serialized orchestration instructions without bypassing normalization (PR #8)", async () => {
+	const pi = await registerWithEnv();
+	pi.thinkingLevel = "xhigh";
+	const hook = pi.handlers.get("before_provider_request");
+	const instructions = "Review the implementation before finishing. Use the provided orchestration tools.";
+	for (const system of [instructions, [{ type: "text", text: instructions, cache_control: { type: "ephemeral" } }]]) {
+		const messages = [{ role: "user", content: "continue" }];
+		const payload = { system, messages, thinking: { type: "enabled", budget_tokens: 4096 }, temperature: 0.7 };
+		const result = await hook({ payload }, {
+			model: { provider: "meridian", id: "claude-fable-5" },
+			cwd: "/repo", getSystemPrompt: () => "host prompt before other extensions",
+		});
+		assert.equal(result.system, system);
+		assert.equal(result.messages, messages);
+		assert.deepEqual(result.thinking, { type: "adaptive" });
+		assert.deepEqual(result.output_config, { effort: "xhigh" });
+		assert.equal("temperature" in result, false);
+		assert.equal(payload.temperature, 0.7);
+		assert.deepEqual(payload.thinking, { type: "enabled", budget_tokens: 4096 });
+	}
+	const result = await hook({ payload: { thinking: { type: "disabled" } } }, {
+		model: { provider: "meridian", id: "claude-fable-5" },
+		cwd: "/repo", getSystemPrompt: () => "unused",
+	});
+	assert.equal("thinking" in result, false);
+	assert.equal("system" in result, false);
+});
+
 test("Claude 5 requests convert legacy budget thinking to adaptive", async () => {
 	const pi = await registerWithEnv();
 	pi.thinkingLevel = "xhigh";
