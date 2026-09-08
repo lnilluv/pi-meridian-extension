@@ -8,7 +8,7 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 - **Registers a `meridian` provider** with the current Meridian Claude models, including Sonnet 5, Opus 5, Fable 5.1, and Mythos 5.1
 - **Rewrites the system prompt** for Meridian requests to avoid the extra-usage error, preserving project context and working directory
-- **Auto-starts Meridian** on session start if the proxy isn't running
+- **Auto-starts Meridian** on session start if the local proxy isn't running. Remote URLs never trigger local startup.
 - **Adds commands**: `/meridian` (health check), `/meridian start`, `/meridian version`
 
 ## Models
@@ -89,7 +89,7 @@ pi --model meridian/claude-opus-5:high
 ## Commands
 
 - `/meridian` — health check (connection status, runtime version, auth, mode)
-- `/meridian start` — start the Meridian daemon if not running
+- `/meridian start` — start the local Meridian daemon if not running
 - `/meridian version` — check installed vs latest version, update availability
 
 ## How the prompt rewrite works

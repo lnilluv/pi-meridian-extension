@@ -337,6 +337,16 @@ function getPortFromBaseUrl(baseUrl: string): number {
 	}
 }
 
+function isLocalBaseUrl(baseUrl: string): boolean {
+	try {
+		const url = new URL(baseUrl);
+		return (url.protocol === "http:" || url.protocol === "https:") &&
+			["127.0.0.1", "localhost", "[::1]", "0.0.0.0"].includes(url.hostname);
+	} catch {
+		return false;
+	}
+}
+
 function normalizeCwd(cwd: string): string {
 	const normalized = cwd.trim().replace(/\\/g, "/");
 	return normalized || ".";
@@ -851,6 +861,13 @@ export default function (pi: ExtensionAPI) {
 					}
 					return;
 				}
+				if (!isLocalBaseUrl(baseUrl)) {
+					ctx.ui.notify(
+						`Meridian unreachable at ${baseUrl}. Local startup requires a local URL; check the remote proxy or MERIDIAN_BASE_URL.`,
+						"warning",
+					);
+					return;
+				}
 				ctx.ui.notify(`Starting Meridian on port ${port}...`, "info");
 				const started = await startMeridianDaemon(
 					baseUrl,
@@ -1056,6 +1073,13 @@ export default function (pi: ExtensionAPI) {
 				}
 			}
 		} catch {
+			if (!isLocalBaseUrl(baseUrl)) {
+				ctx.ui.notify(
+					`Meridian unreachable at ${baseUrl}. Local startup requires a local URL; check the remote proxy or MERIDIAN_BASE_URL.`,
+					"warning",
+				);
+				return;
+			}
 			// Meridian is unreachable — try auto-starting
 			ctx.ui.notify(`Meridian not running. Auto-starting...`, "info");
 			const started = await startMeridianDaemon(baseUrl, port, requestHeaders);
