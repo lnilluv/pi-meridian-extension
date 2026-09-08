@@ -1,27 +1,36 @@
 # pi-meridian-extension
 
-Use your **Claude Max subscription** through [pi](https://github.com/mariozechner/pi-coding-agent) via [Meridian](https://github.com/rynfar/meridian) — a local proxy that bridges the Anthropic Messages API with Claude Code SDK authentication.
+Use your **Claude Max subscription** through [pi](https://github.com/earendil-works/pi) via [Meridian](https://github.com/rynfar/meridian) — a local proxy that bridges the Anthropic Messages API with Claude Code SDK authentication.
 
 Without this extension, pi's default system prompt triggers an `"You're out of extra usage"` error on Claude Opus 4.6 (and potentially other models) when routed through Meridian. This extension rewrites the system prompt **only for Meridian requests** to avoid that issue, while leaving all other providers untouched.
 
 ## What it does
 
-- **Registers a `meridian` provider** with the current Meridian Claude models (Sonnet 4.6, Opus 4.6, Opus 4.7, Opus 4.8, Haiku 4.5)
+- **Registers a `meridian` provider** with the current Meridian Claude models, including Sonnet 5, Opus 5, Fable 5.1, and Mythos 5.1
 - **Rewrites the system prompt** for Meridian requests to avoid the extra-usage error, preserving project context and working directory
-- **Auto-starts Meridian** on session start if the proxy isn't running
+- **Auto-starts Meridian** on session start if the local proxy isn't running. Remote URLs never trigger local startup.
 - **Adds commands**: `/meridian` (health check), `/meridian start`, `/meridian version`
 
 ## Models
 
 | ID | Name |
 |----|------|
+| `meridian/claude-sonnet-5` | Claude Sonnet 5 |
 | `meridian/claude-sonnet-4-6` | Claude Sonnet 4.6 |
+| `meridian/claude-opus-5` | Claude Opus 5 |
 | `meridian/claude-opus-4-6` | Claude Opus 4.6 |
 | `meridian/claude-opus-4-7` | Claude Opus 4.7 |
 | `meridian/claude-opus-4-8` | Claude Opus 4.8 |
+| `meridian/claude-fable-5` | Claude Fable 5 |
+| `meridian/claude-fable-5-1` | Claude Fable 5.1 |
+| `meridian/claude-mythos-5-1` | Claude Mythos 5.1 (Project Glasswing) |
 | `meridian/claude-haiku-4-5` | Claude Haiku 4.5 |
 
-Use them with `--model`, e.g. `--model meridian/claude-opus-4-8:high`.
+Use them with `--model`, e.g. `--model meridian/claude-fable-5-1:xhigh`.
+
+Mythos 5.1 is invitation-only for Project Glasswing customers. Fable 5.1 and Mythos 5.1 use Anthropic's $10/$50 per-million-token rates and $0.25 per-million-token cache reads. They require adaptive thinking, so the extension removes unsupported sampling fields and forced tool choices.
+
+Opus, Fable, and Mythos models start with a conservative 200k context window and refresh from Meridian's `/v1/models` catalog. Eligible subscriptions then advertise the 1M tier; without a successful catalog, the extension keeps the safe 200k baseline. After a successful refresh, Pi retains the last-known catalog during an aborted refresh.
 
 ## Install
 
@@ -29,7 +38,7 @@ Use them with `--model`, e.g. `--model meridian/claude-opus-4-8:high`.
 pi install npm:pi-meridian-extension
 ```
 
-Requires [Meridian](https://github.com/rynfar/meridian) installed globally:
+Requires pi 0.81.1 or newer and [Meridian](https://github.com/rynfar/meridian) 1.60.0 or newer installed globally:
 
 ```bash
 npm install -g @rynfar/meridian
@@ -42,6 +51,11 @@ npm install -g @rynfar/meridian
 | `MERIDIAN_BASE_URL` | `http://127.0.0.1:3456` | Meridian proxy URL |
 | `MERIDIAN_API_KEY` | `meridian` | Bearer token sent to Meridian. Set this to the same value as the Meridian daemon when upstream API-key auth is enabled. |
 | `MERIDIAN_PROFILE` | unset | Optional Meridian profile ID sent as `x-meridian-profile` for multi-profile setups. |
+| `MERIDIAN_PASSTHROUGH` | enabled by Meridian's Pi adapter | Keep passthrough enabled so Pi executes its own tools. Setting `0` switches to internal mode and may hide Pi-owned tools. |
+
+### Passthrough behavior
+
+The extension identifies Pi with `x-meridian-agent: pi`. Meridian's Pi adapter uses passthrough by default: Pi executes its own tools and Meridian forwards the tool calls. Claude.ai MCP connectors are intentionally unavailable in passthrough because those tools run inside the proxy process, not in Pi. The `/meridian` health command warns when a healthy daemon reports internal mode.
 
 ## Subagent Compatibility
 
@@ -63,19 +77,19 @@ extensions: /path/to/other/extension.ts, /opt/homebrew/lib/node_modules/pi-merid
 After installing, switch your model in pi:
 
 ```
-/model meridian/claude-opus-4-8:high
+/model meridian/claude-opus-5:high
 ```
 
 Or use it for a single command:
 
 ```bash
-pi --model meridian/claude-opus-4-8:high
+pi --model meridian/claude-opus-5:high
 ```
 
 ## Commands
 
 - `/meridian` — health check (connection status, runtime version, auth, mode)
-- `/meridian start` — start the Meridian daemon if not running
+- `/meridian start` — start the local Meridian daemon if not running
 - `/meridian version` — check installed vs latest version, update availability
 
 ## How the prompt rewrite works
