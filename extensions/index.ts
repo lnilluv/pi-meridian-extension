@@ -783,6 +783,14 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
+	// Keep tool-result turns on the same Meridian session, while respecting
+	// explicit affinity keys supplied by an orchestrator or provider config.
+	pi.on("before_provider_headers", (event, ctx) => {
+		if (ctx.model?.provider !== "meridian") return;
+		if (Object.keys(event.headers).some((key) => key.toLowerCase() === "x-session-affinity")) return;
+		event.headers["x-session-affinity"] = ctx.sessionManager.getSessionId();
+	});
+
 	pi.on("before_provider_request", (event, ctx) => {
 		if (ctx.model?.provider !== "meridian") return;
 

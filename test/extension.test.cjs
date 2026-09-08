@@ -192,6 +192,69 @@ test("provider defaults to placeholder api key and omits blank profile", async (
 	assert.deepEqual(provider.headers, { "x-meridian-agent": "pi" });
 });
 
+test("session affinity reaches HTTP across tool turns and session switches (PR #10)", async (t) => {
+	const { createServer } = require("node:http");
+	const { stream } = await import("@earendil-works/pi-ai/api/anthropic-messages");
+	const requests = [];
+	const server = createServer(async (req, res) => {
+		let body = "";
+		for await (const chunk of req) body += chunk;
+		requests.push({ headers: req.headers, body: JSON.parse(body) });
+		res.writeHead(200, { "content-type": "text/event-stream" });
+		for (const event of [
+			{ type: "message_start", message: { id: "msg_test", role: "assistant", content: [], usage: { input_tokens: 1, output_tokens: 1 } } },
+			{ type: "content_block_start", index: 0, content_block: { type: "tool_use", id: "tool_test", name: "read", input: {} } },
+			{ type: "content_block_stop", index: 0 },
+			{ type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 1 } },
+			{ type: "message_stop" },
+		]) res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+		res.end();
+	});
+	await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+	t.after(() => new Promise(resolve => server.close(resolve)));
+	const pi = await registerWithEnv({ MERIDIAN_BASE_URL: `http://127.0.0.1:${server.address().port}` });
+	const provider = pi.providers.get("meridian");
+	const model = { ...provider.models[0], provider: "meridian", api: provider.api, baseUrl: provider.baseUrl };
+	let sessionId = "session-a";
+	const ctx = { model, cwd: "/workspace", getSystemPrompt: () => "system",
+		sessionManager: { getSessionId: () => sessionId } };
+	const messages = [{ role: "user", content: "read a file", timestamp: Date.now() }];
+	for (const id of ["session-a", "session-a", "session-b"]) {
+		sessionId = id;
+		const headers = { ...provider.headers };
+		await pi.handlers.get("before_provider_headers")?.({ headers }, ctx);
+		const result = await stream(model, { messages }, {
+			apiKey: "meridian", headers, sessionId, cacheRetention: "none",
+			signal: AbortSignal.timeout(5000),
+			onPayload: payload => pi.handlers.get("before_provider_request")({ payload }, ctx),
+		}).result();
+		assert.equal(result.stopReason, "toolUse", result.errorMessage);
+		if (messages.length === 1) messages.push(result, {
+			role: "toolResult", toolCallId: "tool_test", toolName: "read",
+			content: [{ type: "text", text: "file contents" }], isError: false, timestamp: Date.now(),
+		});
+	}
+	assert.deepEqual(requests.map(r => r.headers["x-session-affinity"]), ["session-a", "session-a", "session-b"]);
+	assert.equal(requests[1].body.messages.at(-1).content[0].type, "tool_result");
+	assert.ok(requests.every(r => r.headers["x-meridian-agent"] === "pi"));
+});
+
+test("session affinity preserves explicit headers and bypasses other providers", async () => {
+	const pi = await registerWithEnv();
+	const hook = pi.handlers.get("before_provider_headers");
+	assert.equal(typeof hook, "function");
+	const ctx = { model: { provider: "meridian" }, sessionManager: { getSessionId: () => "fallback" } };
+	for (const headers of [{ "x-session-affinity": "orchestrator" }, { "X-Session-Affinity": "orchestrator" }, { "x-session-affinity": null }]) {
+		const original = { ...headers };
+		await hook({ headers }, ctx);
+		assert.deepEqual(headers, original);
+	}
+	const headers = {};
+	await hook({ headers }, { model: { provider: "anthropic" } });
+	await hook({ headers }, { model: undefined });
+	assert.deepEqual(headers, {});
+});
+
 test("provider model catalog uses safe context defaults before refresh", async () => {
 	const pi = await registerWithEnv();
 	const provider = pi.providers.get("meridian");

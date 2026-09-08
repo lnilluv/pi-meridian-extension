@@ -8,6 +8,7 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 - **Registers a `meridian` provider** with the current Meridian Claude models, including Sonnet 5, Opus 5, Fable 5.1, and Mythos 5.1
 - **Rewrites the system prompt** to avoid the extra-usage error, preserving project context and working directory. Fable 5 keeps its full prompt.
+- **Sends Pi's session ID** as `x-session-affinity` so Meridian can identify tool-result continuations. Explicit affinity headers are preserved.
 - **Auto-starts Meridian** on session start if the local proxy isn't running. Remote URLs never trigger local startup.
 - **Adds commands**: `/meridian` (health check), `/meridian start`, `/meridian version`
 
