@@ -18,7 +18,12 @@ const STARTUP_WAIT_MS = 6000;
 const STARTUP_POLL_MS = 500;
 const DEFAULT_MODEL_INPUT: ("text" | "image")[] = ["text", "image"];
 const DEFAULT_CONTEXT_WINDOW = 200000;
-const EXTENDED_CONTEXT_WINDOW = 1000000;
+const SONNET_5_COST = {
+	input: 2,
+	output: 10,
+	cacheRead: 0.2,
+	cacheWrite: 2.5,
+} as const;
 const SONNET_COST = {
 	input: 3,
 	output: 15,
@@ -37,6 +42,12 @@ const FABLE_COST = {
 	cacheRead: 1,
 	cacheWrite: 12.5,
 } as const;
+const FABLE_5_1_COST = {
+	input: 10,
+	output: 50,
+	cacheRead: 0.25,
+	cacheWrite: 12.5,
+} as const;
 const HAIKU_COST = {
 	input: 1,
 	output: 5,
@@ -51,6 +62,13 @@ const ADAPTIVE_MODEL_IDS = new Set([
 	"claude-opus-4-7",
 	"claude-opus-4-8",
 	"claude-fable-5",
+	"claude-fable-5-1",
+	"claude-mythos-5-1",
+]);
+const ALWAYS_ON_ADAPTIVE_MODEL_IDS = new Set([
+	"claude-fable-5",
+	"claude-fable-5-1",
+	"claude-mythos-5-1",
 ]);
 const SAMPLING_UNSUPPORTED_MODEL_IDS = new Set([
 	"claude-sonnet-5",
@@ -58,6 +76,12 @@ const SAMPLING_UNSUPPORTED_MODEL_IDS = new Set([
 	"claude-opus-4-7",
 	"claude-opus-4-8",
 	"claude-fable-5",
+	"claude-fable-5-1",
+	"claude-mythos-5-1",
+]);
+const FORCED_TOOL_CHOICE_UNSUPPORTED_MODEL_IDS = new Set([
+	"claude-fable-5-1",
+	"claude-mythos-5-1",
 ]);
 const MAX_EFFORT_MODEL_IDS = new Set([
 	"claude-sonnet-4-6",
@@ -71,7 +95,7 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		reasoning: true,
 		thinkingLevelMap: { xhigh: "xhigh" },
 		input: DEFAULT_MODEL_INPUT,
-		cost: SONNET_COST,
+		cost: SONNET_5_COST,
 		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: 128_000,
 	},
@@ -83,7 +107,7 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		input: DEFAULT_MODEL_INPUT,
 		cost: SONNET_COST,
 		contextWindow: DEFAULT_CONTEXT_WINDOW,
-		maxTokens: 64_000,
+		maxTokens: 128_000,
 	},
 	{
 		id: "claude-opus-5",
@@ -92,7 +116,7 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		thinkingLevelMap: { xhigh: "xhigh" },
 		input: DEFAULT_MODEL_INPUT,
 		cost: OPUS_COST,
-		contextWindow: EXTENDED_CONTEXT_WINDOW,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: 128_000,
 	},
 	{
@@ -102,7 +126,7 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		thinkingLevelMap: { xhigh: "max" },
 		input: DEFAULT_MODEL_INPUT,
 		cost: OPUS_COST,
-		contextWindow: EXTENDED_CONTEXT_WINDOW,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: 128_000,
 	},
 	{
@@ -112,7 +136,7 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		thinkingLevelMap: { xhigh: "xhigh" },
 		input: DEFAULT_MODEL_INPUT,
 		cost: OPUS_COST,
-		contextWindow: EXTENDED_CONTEXT_WINDOW,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: 128_000,
 	},
 	{
@@ -122,7 +146,7 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		thinkingLevelMap: { xhigh: "xhigh" },
 		input: DEFAULT_MODEL_INPUT,
 		cost: OPUS_COST,
-		contextWindow: EXTENDED_CONTEXT_WINDOW,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: 128_000,
 	},
 	{
@@ -132,8 +156,30 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		thinkingLevelMap: { off: null, xhigh: "xhigh" },
 		input: DEFAULT_MODEL_INPUT,
 		cost: FABLE_COST,
-		contextWindow: EXTENDED_CONTEXT_WINDOW,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: 128_000,
+	},
+	{
+		id: "claude-fable-5-1",
+		name: "Claude Fable 5.1 (Meridian)",
+		reasoning: true,
+		thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+		input: DEFAULT_MODEL_INPUT,
+		cost: FABLE_5_1_COST,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
+		maxTokens: 128_000,
+		compat: { forceAdaptiveThinking: true, supportsTemperature: false },
+	},
+	{
+		id: "claude-mythos-5-1",
+		name: "Claude Mythos 5.1 (Meridian)",
+		reasoning: true,
+		thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+		input: DEFAULT_MODEL_INPUT,
+		cost: FABLE_5_1_COST,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
+		maxTokens: 128_000,
+		compat: { forceAdaptiveThinking: true, supportsTemperature: false },
 	},
 	{
 		id: "claude-haiku-4-5",
@@ -148,6 +194,50 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// Meridian 1.66 still advertises the legacy Fable 5 id from /v1/models.
+// These newer ids use the same Fable routing tier, so inherit its account-aware
+// context window until Meridian exposes them directly.
+const MODEL_CATALOG_FALLBACK_IDS: Record<string, string> = {
+	"claude-fable-5-1": "claude-fable-5",
+	"claude-mythos-5-1": "claude-fable-5",
+};
+
+function parseModelCatalogContextWindows(value: unknown): Map<string, number> {
+	if (!isRecord(value) || !Array.isArray(value.data)) {
+		throw new Error("Meridian model catalog has an invalid shape");
+	}
+
+	const contextWindows = new Map<string, number>();
+	for (const entry of value.data) {
+		if (!isRecord(entry)) continue;
+		if (typeof entry.id !== "string") continue;
+		if (
+			typeof entry.context_window !== "number" ||
+			!Number.isSafeInteger(entry.context_window) ||
+			entry.context_window <= 0
+		) {
+			continue;
+		}
+		contextWindows.set(entry.id, entry.context_window);
+	}
+
+	if (contextWindows.size === 0) {
+		throw new Error("Meridian model catalog has no usable context windows");
+	}
+	return contextWindows;
+}
+
+function applyModelCatalogContextWindows(
+	contextWindows: Map<string, number>,
+): ProviderModelConfig[] {
+	return MERIDIAN_MODELS.map((model) => {
+		const contextWindow =
+			contextWindows.get(model.id) ??
+			contextWindows.get(MODEL_CATALOG_FALLBACK_IDS[model.id]);
+		return contextWindow === undefined ? model : { ...model, contextWindow };
+	});
 }
 
 function getAdaptiveEffort(modelId: string, thinkingLevel: string): string {
@@ -171,7 +261,26 @@ function normalizeModelRequest(
 		delete normalized.top_k;
 	}
 
+	if (FORCED_TOOL_CHOICE_UNSUPPORTED_MODEL_IDS.has(modelId)) {
+		const toolChoice = normalized.tool_choice;
+		const toolChoiceType = isRecord(toolChoice)
+			? toolChoice.type
+			: toolChoice;
+		if (toolChoiceType === "any" || toolChoiceType === "tool") {
+			// Fable 5.1 and Mythos 5.1 reject forced tool use. Removing the
+			// choice lets the model decide normally instead of returning a 400.
+			delete normalized.tool_choice;
+		}
+	}
+
 	if (!ADAPTIVE_MODEL_IDS.has(modelId) || !isRecord(normalized.thinking)) {
+		return normalized;
+	}
+	if (normalized.thinking.type === "disabled") {
+		// Fable 5/5.1 and Mythos 5.1 only support always-on adaptive thinking.
+		// Omitting the field selects that mode without sending a 400-inducing
+		// `type: "disabled"` request.
+		if (ALWAYS_ON_ADAPTIVE_MODEL_IDS.has(modelId)) delete normalized.thinking;
 		return normalized;
 	}
 	if (normalized.thinking.type !== "enabled") return normalized;
@@ -214,9 +323,15 @@ function getMeridianRequestHeaders(): Record<string, string> {
 	};
 }
 
+const EXPLICIT_PORT_REGEX =
+	/^[a-z][a-z\d+.-]*:\/\/(?:[^/?#@]*@)?(?:\[[^\]]+\]|[^/?#:]+):(\d+)(?:[/?#]|$)/i;
+
 function getPortFromBaseUrl(baseUrl: string): number {
 	try {
-		return Number(new URL(baseUrl).port) || DEFAULT_PORT;
+		const url = new URL(baseUrl);
+		// URL.port omits explicit scheme-default ports such as http:80.
+		const explicitPort = EXPLICIT_PORT_REGEX.exec(baseUrl.trim())?.[1];
+		return Number(url.port || explicitPort) || DEFAULT_PORT;
 	} catch {
 		return DEFAULT_PORT;
 	}
@@ -291,7 +406,17 @@ interface MeridianHealth {
 		subscriptionType?: string;
 	};
 	mode?: string;
+	message?: string;
 	error?: string;
+}
+
+function describeHealthIssue(health: MeridianHealth): string {
+	return health.message || health.error || health.status;
+}
+
+function getPassthroughWarning(health: MeridianHealth): string | null {
+	if (health.mode !== "internal") return null;
+	return "Meridian is running in internal mode; Pi-owned tools are not forwarded. Restart Meridian with passthrough enabled for Pi's normal tool loop.";
 }
 
 async function fetchHealth(
@@ -335,7 +460,7 @@ async function fetchHealth(
 			};
 		}
 		if (!response.ok && !health.error) {
-			health.error = `HTTP ${response.status}`;
+			health.error = health.message || `HTTP ${response.status}`;
 		}
 		return health;
 	} catch (err) {
@@ -410,10 +535,13 @@ async function startMeridianDaemon(
 		try {
 			await new Promise<void>((resolveSpawn) => {
 				try {
-					const child = spawn("meridian", ["--port", String(port)], {
+					const child = spawn("meridian", [], {
 						detached: true,
 						stdio: "ignore",
-						env: process.env,
+						env: {
+							...process.env,
+							MERIDIAN_PORT: String(port),
+						},
 					});
 
 					child.unref();
@@ -592,6 +720,7 @@ export default function (pi: ExtensionAPI) {
 		...providerHeaders,
 		Authorization: `Bearer ${apiKey}`,
 	};
+	let lastKnownModels = MERIDIAN_MODELS;
 
 	// Register the Meridian provider
 	pi.registerProvider("meridian", {
@@ -601,14 +730,39 @@ export default function (pi: ExtensionAPI) {
 		authHeader: true,
 		headers: providerHeaders,
 		models: MERIDIAN_MODELS,
+		refreshModels: async ({ allowNetwork, signal }) => {
+			if (!allowNetwork || signal?.aborted) return lastKnownModels;
+
+			try {
+				const response = await fetch(`${baseUrl}/v1/models`, {
+					headers: requestHeaders,
+					signal,
+				});
+				if (!response.ok) {
+					throw new Error(
+						`Meridian model catalog request failed: HTTP ${response.status}`,
+					);
+				}
+
+				const catalog: unknown = await response.json();
+				const refreshed = applyModelCatalogContextWindows(
+					parseModelCatalogContextWindows(catalog),
+				);
+				if (signal?.aborted) return lastKnownModels;
+				lastKnownModels = refreshed;
+				return refreshed;
+			} catch (error) {
+				if (signal?.aborted) return lastKnownModels;
+				throw error;
+			}
+		},
 	});
 
-	// Meridian treats headerless client-driven tool loops as independent requests,
-	// which starts a fresh SDK session and replays the full prompt on every tool
-	// result. Pin all requests from this pi session to the same Meridian session so
-	// continuation turns resume the SDK session and preserve its prompt cache.
+	// Keep tool-result turns on the same Meridian session, while respecting
+	// explicit affinity keys supplied by an orchestrator or provider config.
 	pi.on("before_provider_headers", (event, ctx) => {
 		if (ctx.model?.provider !== "meridian") return;
+		if (Object.keys(event.headers).some((key) => key.toLowerCase() === "x-session-affinity")) return;
 		event.headers["x-session-affinity"] = ctx.sessionManager.getSessionId();
 	});
 
@@ -668,7 +822,32 @@ export default function (pi: ExtensionAPI) {
 					requestHeaders,
 				);
 				if (alreadyRunning && runningHealth) {
-					ctx.ui.notify(`Meridian is already running at ${baseUrl}`, "info");
+					const modeWarning = getPassthroughWarning(runningHealth);
+					const versionWarning = getMinimumVersionWarning(runningHealth.version);
+					if (runningHealth.status === "draining") {
+						ctx.ui.notify(
+							`Meridian is draining: ${describeHealthIssue(runningHealth)}`,
+							"warning",
+						);
+					} else if (runningHealth.status !== "healthy") {
+						ctx.ui.notify(
+							`Meridian ${runningHealth.status}: ${describeHealthIssue(runningHealth)}`,
+							"warning",
+						);
+					} else {
+						let warningShown = false;
+						if (modeWarning) {
+							ctx.ui.notify(modeWarning, "warning");
+							warningShown = true;
+						}
+						if (versionWarning) {
+							ctx.ui.notify(versionWarning, "warning");
+							warningShown = true;
+						}
+						if (!warningShown) {
+							ctx.ui.notify(`Meridian is already running at ${baseUrl}`, "info");
+						}
+					}
 					return;
 				}
 				ctx.ui.notify(`Starting Meridian on port ${port}...`, "info");
@@ -679,20 +858,29 @@ export default function (pi: ExtensionAPI) {
 				);
 				if (started) {
 					const health = await fetchHealth(baseUrl, undefined, requestHeaders);
-					if (health.auth?.loggedIn) {
+					if (health.status !== "healthy") {
 						ctx.ui.notify(
-							`✓ Meridian started (${baseUrl}) — ${health.auth.email} (${health.auth.subscriptionType || "unknown"})`,
-							"info",
-						);
-					} else {
-						ctx.ui.notify(
-							`✓ Meridian started (${baseUrl}) — not logged in, run: claude login`,
+							`Meridian ${health.status}: ${describeHealthIssue(health)}`,
 							"warning",
 						);
-					}
-					const versionWarning = getMinimumVersionWarning(health.version);
-					if (versionWarning) {
-						ctx.ui.notify(versionWarning, "warning");
+					} else {
+						const modeWarning = getPassthroughWarning(health);
+						if (health.auth?.loggedIn) {
+							ctx.ui.notify(
+								`✓ Meridian started (${baseUrl}) — ${health.auth.email} (${health.auth.subscriptionType || "unknown"})`,
+								"info",
+							);
+						} else {
+							ctx.ui.notify(
+								`✓ Meridian started (${baseUrl}) — not logged in, run: claude login`,
+								"warning",
+							);
+						}
+						const versionWarning = getMinimumVersionWarning(health.version);
+						if (modeWarning) ctx.ui.notify(modeWarning, "warning");
+						if (versionWarning) {
+							ctx.ui.notify(versionWarning, "warning");
+						}
 					}
 				} else {
 					// spawn error details were captured in startMeridianDaemon
@@ -743,7 +931,13 @@ export default function (pi: ExtensionAPI) {
 
 				const running = health.status !== "unreachable";
 				lines.push("");
-				lines.push(running ? `Running at ${baseUrl}` : `Not running`);
+				lines.push(
+					health.status === "draining"
+						? `Draining at ${baseUrl}: ${describeHealthIssue(health)}`
+						: running
+							? `Running at ${baseUrl}`
+							: `Not running`,
+				);
 				if (runtimeWarning) {
 					lines.push("");
 					lines.push(`⚠ ${runtimeWarning}`);
@@ -751,7 +945,11 @@ export default function (pi: ExtensionAPI) {
 
 				ctx.ui.notify(
 					lines.join("\n"),
-					version.updateAvailable || runtimeWarning ? "warning" : "info",
+					health.status === "draining" ||
+						version.updateAvailable ||
+						runtimeWarning
+						? "warning"
+						: "info",
 				);
 				return;
 			}
@@ -789,6 +987,7 @@ export default function (pi: ExtensionAPI) {
 
 			if (health.status === "healthy") {
 				const versionWarning = getMinimumVersionWarning(health.version);
+				const modeWarning = getPassthroughWarning(health);
 				const lines = [
 					`✓ Meridian connected (${baseUrl})`,
 					...(health.version ? [`  Version: ${health.version}`] : []),
@@ -800,20 +999,28 @@ export default function (pi: ExtensionAPI) {
 								`  Auth: ${health.error || "not logged in"}. Run: claude login`,
 							]),
 					`  Mode: ${health.mode || "unknown"}`,
+					...(modeWarning ? [`  Warning: ${modeWarning}`] : []),
 					...(versionWarning ? [`  Warning: ${versionWarning}`] : []),
 				];
 				ctx.ui.notify(
 					lines.join("\n"),
-					health.auth?.loggedIn && !versionWarning ? "info" : "warning",
+					health.auth?.loggedIn && !modeWarning && !versionWarning
+						? "info"
+						: "warning",
+				);
+			} else if (health.status === "draining") {
+				ctx.ui.notify(
+					`Meridian is draining: ${describeHealthIssue(health)}`,
+					"warning",
 				);
 			} else if (health.status === "degraded") {
 				ctx.ui.notify(
-					`Meridian degraded: ${health.error || "unknown"}`,
+					`Meridian degraded: ${describeHealthIssue(health)}`,
 					"warning",
 				);
 			} else {
 				ctx.ui.notify(
-					`Meridian unhealthy: ${health.error || health.status}`,
+					`Meridian unhealthy: ${describeHealthIssue(health)}`,
 					"error",
 				);
 			}
@@ -828,13 +1035,24 @@ export default function (pi: ExtensionAPI) {
 		try {
 			const health = await fetchHealth(baseUrl, undefined, requestHeaders);
 			const versionWarning = getMinimumVersionWarning(health.version);
-			if (health.status !== "healthy" || !health.auth?.loggedIn) {
+			const modeWarning = getPassthroughWarning(health);
+			if (health.status === "draining") {
 				ctx.ui.notify(
-					`Meridian issue: ${health.error || health.status}. Run /meridian for details.`,
+					`Meridian is draining: ${describeHealthIssue(health)}`,
 					"warning",
 				);
-			} else if (versionWarning) {
-				ctx.ui.notify(versionWarning, "warning");
+			} else if (health.status !== "healthy" || !health.auth?.loggedIn) {
+				ctx.ui.notify(
+					`Meridian issue: ${describeHealthIssue(health)}. Run /meridian for details.`,
+					"warning",
+				);
+			} else {
+				if (modeWarning) {
+					ctx.ui.notify(modeWarning, "warning");
+				}
+				if (versionWarning) {
+					ctx.ui.notify(versionWarning, "warning");
+				}
 			}
 		} catch {
 			// Meridian is unreachable — try auto-starting

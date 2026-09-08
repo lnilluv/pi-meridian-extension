@@ -6,9 +6,9 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 ## What it does
 
-- **Registers a `meridian` provider** with the current Meridian Claude models, including Sonnet 5, Opus 5, and Fable 5
+- **Registers a `meridian` provider** with the current Meridian Claude models, including Sonnet 5, Opus 5, Fable 5.1, and Mythos 5.1
 - **Rewrites the system prompt** for Meridian requests to avoid the extra-usage error, preserving project context and working directory
-- **Pins each pi session to a Meridian session** so tool-result turns resume the SDK session and preserve prompt-cache hits
+- **Sends Pi's session ID** as `x-session-affinity` so Meridian can identify tool-result continuations. Explicit affinity headers are preserved.
 - **Auto-starts Meridian** on session start if the proxy isn't running
 - **Adds commands**: `/meridian` (health check), `/meridian start`, `/meridian version`
 
@@ -23,11 +23,15 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 | `meridian/claude-opus-4-7` | Claude Opus 4.7 |
 | `meridian/claude-opus-4-8` | Claude Opus 4.8 |
 | `meridian/claude-fable-5` | Claude Fable 5 |
+| `meridian/claude-fable-5-1` | Claude Fable 5.1 |
+| `meridian/claude-mythos-5-1` | Claude Mythos 5.1 (Project Glasswing) |
 | `meridian/claude-haiku-4-5` | Claude Haiku 4.5 |
 
-Use them with `--model`, e.g. `--model meridian/claude-opus-5:high`.
+Use them with `--model`, e.g. `--model meridian/claude-fable-5-1:xhigh`.
 
-Opus and Fable models advertise Meridian's 1M context tier. Meridian may fall back to 200k when the active Claude subscription cannot use extended context.
+Mythos 5.1 is invitation-only for Project Glasswing customers. Fable 5.1 and Mythos 5.1 use Anthropic's $10/$50 per-million-token rates and $0.25 per-million-token cache reads. They require adaptive thinking, so the extension removes unsupported sampling fields and forced tool choices.
+
+Opus, Fable, and Mythos models start with a conservative 200k context window and refresh from Meridian's `/v1/models` catalog. Eligible subscriptions then advertise the 1M tier; without a successful catalog, the extension keeps the safe 200k baseline. After a successful refresh, Pi retains the last-known catalog during an aborted refresh.
 
 ## Install
 
@@ -48,6 +52,11 @@ npm install -g @rynfar/meridian
 | `MERIDIAN_BASE_URL` | `http://127.0.0.1:3456` | Meridian proxy URL |
 | `MERIDIAN_API_KEY` | `meridian` | Bearer token sent to Meridian. Set this to the same value as the Meridian daemon when upstream API-key auth is enabled. |
 | `MERIDIAN_PROFILE` | unset | Optional Meridian profile ID sent as `x-meridian-profile` for multi-profile setups. |
+| `MERIDIAN_PASSTHROUGH` | enabled by Meridian's Pi adapter | Keep passthrough enabled so Pi executes its own tools. Setting `0` switches to internal mode and may hide Pi-owned tools. |
+
+### Passthrough behavior
+
+The extension identifies Pi with `x-meridian-agent: pi`. Meridian's Pi adapter uses passthrough by default: Pi executes its own tools and Meridian forwards the tool calls. Claude.ai MCP connectors are intentionally unavailable in passthrough because those tools run inside the proxy process, not in Pi. The `/meridian` health command warns when a healthy daemon reports internal mode.
 
 ## Subagent Compatibility
 
