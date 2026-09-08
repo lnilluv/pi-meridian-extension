@@ -115,6 +115,9 @@ test("custom-port start passes the URL port through MERIDIAN_PORT", async (t) =>
 	for (const [baseUrl, expectedPort] of [
 		["http://127.0.0.1:80", "80"],
 		["https://127.0.0.1:443", "443"],
+		["http://localhost:3456", "3456"],
+		["http://[::1]:3456", "3456"],
+		["http://0.0.0.0:3456", "3456"],
 	]) {
 		spawned.length = 0;
 		healthCalls = 0;
@@ -127,6 +130,42 @@ test("custom-port start passes the URL port through MERIDIAN_PORT", async (t) =>
 		});
 		assert.equal(spawned.length, 1);
 		assert.equal(spawned[0].options.env.MERIDIAN_PORT, expectedPort);
+	}
+});
+
+test("remote URLs never spawn a local daemon from either entry point (PR #7)", async (t) => {
+	const childProcess = require("node:child_process");
+	const originalSpawn = childProcess.spawn;
+	const originalFetch = global.fetch;
+	const originalPath = process.env.PATH;
+	let spawns = 0;
+	t.after(() => {
+		childProcess.spawn = originalSpawn;
+		global.fetch = originalFetch;
+		process.env.PATH = originalPath;
+	});
+	childProcess.spawn = () => {
+		spawns++;
+		return { unref() {}, on(event, handler) {
+			if (event === "error") handler(Object.assign(new Error("missing binary"), { code: "ENOENT" }));
+			return this;
+		} };
+	};
+	global.fetch = async () => { throw new Error("unreachable"); };
+	process.env.PATH = "";
+	for (const url of ["http://proxy.example:3456", "http://100.64.0.2:3456", "http://[2001:db8::1]:3456", "not-a-url"]) {
+		const pi = await registerWithEnv({ MERIDIAN_BASE_URL: url });
+		for (const entry of ["session_start", "start"]) {
+			const notifications = [];
+			const ctx = { model: { provider: "meridian" }, ui: {
+				notify(message, level) { notifications.push({ message, level }); },
+			} };
+			if (entry === "start") await pi.commands.get("meridian").handler("start", ctx);
+			else await pi.handlers.get("session_start")({}, ctx);
+			assert.equal(spawns, 0, `${url} via ${entry}`);
+			assert.ok(notifications.some(n => /remote|local URL/i.test(n.message)), JSON.stringify(notifications));
+			assert.ok(!notifications.some(n => /auto-starting|run manually: meridian/i.test(n.message)));
+		}
 	}
 });
 
@@ -447,6 +486,35 @@ test("package uses the current Pi host package", () => {
 		packageJson.peerDependencies["@mariozechner/pi-coding-agent"],
 		undefined,
 	);
+});
+
+test("prompt shaping accepts host text blocks and absent prompts (issue #6)", async () => {
+	const pi = await registerWithEnv();
+	const hook = pi.handlers.get("before_provider_request");
+	const lines = [
+		"# Project Context\nKeep project instructions.",
+		"Current date: 2026-08-27",
+		"Current working directory: /project",
+	];
+	for (const prompt of [lines, lines.map(text => ({ type: "text", text })), lines.join("\n")]) {
+		const messages = [{ role: "user", content: "hello" }];
+		const result = await hook({ payload: { messages } }, {
+			model: { provider: "meridian", id: "claude-opus-4-8" },
+			cwd: "/fallback",
+			getSystemPrompt: () => prompt,
+		});
+		for (const line of lines) assert.ok(result.system.includes(line));
+		assert.equal(result.messages, messages);
+	}
+	for (const prompt of [undefined, null, [], [null, { type: "image" }, { text: 42 }]]) {
+		const result = await hook({ payload: {} }, {
+			model: { provider: "meridian", id: "claude-opus-4-8" },
+			cwd: "/fallback",
+			getSystemPrompt: () => prompt,
+		});
+		assert.match(result.system, /Current working directory: \/fallback/);
+		assert.match(result.system, /Current date: \d{4}-\d{2}-\d{2}/);
+	}
 });
 
 test("Fable 5 preserves serialized orchestration instructions without bypassing normalization (PR #8)", async () => {
