@@ -580,7 +580,36 @@ test("prompt shaping accepts host text blocks and absent prompts (issue #6)", as
 	}
 });
 
-test("Fable 5 preserves serialized orchestration instructions without bypassing normalization (PR #8)", async () => {
+test("prompt shaping preserves Pi project instructions in XML (issue #20)", async () => {
+	const pi = await registerWithEnv();
+	const hook = pi.handlers.get("before_provider_request");
+	const projectInstructions = "Always run tests before finishing.";
+	const systemPrompt = [
+		"<project_context>",
+		"",
+		"Project-specific instructions and guidelines:",
+		"",
+		'<project_instructions path="/tmp/AGENTS.md">',
+		projectInstructions,
+		"</project_instructions>",
+		"",
+		"</project_context>",
+		"Current date: 2026-09-11",
+		"Current working directory: /tmp/project",
+	].join("\n");
+	const result = await hook({ payload: { messages: [] } }, {
+		model: { provider: "meridian", id: "claude-opus-4-8" },
+		cwd: "/fallback",
+		getSystemPrompt: () => systemPrompt,
+	});
+
+	assert.ok(result.system.includes("<project_context>"));
+	assert.ok(result.system.includes('<project_instructions path="/tmp/AGENTS.md">'));
+	assert.ok(result.system.includes(projectInstructions));
+	assert.ok(result.system.includes("</project_context>"));
+});
+
+test("Fable 5 preserves serialized orchestration instructions without bypassing normalization (PR #8)", async (t) => {
 	const pi = await registerWithEnv();
 	pi.thinkingLevel = "xhigh";
 	const hook = pi.handlers.get("before_provider_request");
