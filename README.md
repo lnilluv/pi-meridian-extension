@@ -100,7 +100,7 @@ For `meridian/claude-fable-5`, the extension preserves the serialized system pro
 For other Meridian models, the extension hooks `before_provider_request` and replaces the full system prompt with a concise version that:
 
 1. Identifies as Claude Code operating through Meridian for pi
-2. Preserves your `# Project Context` section from the original prompt
+2. Preserves your `<project_context>` section from the original prompt (and legacy `# Project Context` prompts)
 3. Preserves `Current date:` and `Current working directory:` lines
 4. Drops pi's heavy default prompt that triggers the extra-usage error
 5. Adds guidance for short user replies and clarification answers, respects requests to wait, and distinguishes tool results from user instructions
