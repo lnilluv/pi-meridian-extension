@@ -277,6 +277,12 @@ test("provider model catalog uses safe context defaults before refresh", async (
 		cacheRead: 0.5,
 		cacheWrite: 6.25,
 	};
+	const opus55Cost = {
+		input: 4,
+		output: 20,
+		cacheRead: 0.2,
+		cacheWrite: 5,
+	};
 	const fableCost = {
 		input: 10,
 		output: 50,
@@ -315,6 +321,17 @@ test("provider model catalog uses safe context defaults before refresh", async (
 			cost: sonnet46Cost,
 			contextWindow: 200_000,
 			maxTokens: 128_000,
+		},
+		{
+			id: "claude-opus-5-5",
+			name: "Claude Opus 5.5 (Meridian)",
+			reasoning: true,
+			thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+			input: ["text", "image"],
+			cost: opus55Cost,
+			contextWindow: 200_000,
+			maxTokens: 128_000,
+			compat: { forceAdaptiveThinking: true, supportsTemperature: false },
 		},
 		{
 			id: "claude-opus-5",
@@ -406,6 +423,7 @@ test("model refresh applies Meridian's account-aware context windows", async (t)
 			status: 200,
 			json: async () => ({
 				data: [
+					{ id: "claude-opus-5-5", context_window: 1_000_000 },
 					{ id: "claude-opus-5", context_window: 1_000_000 },
 					{ id: "claude-fable-5", context_window: 1_000_000 },
 					{ id: "claude-sonnet-5", context_window: 200_000 },
@@ -425,6 +443,10 @@ test("model refresh applies Meridian's account-aware context windows", async (t)
 	assert.equal(requests.length, 1);
 	assert.equal(requests[0].url, "http://127.0.0.1:3456/v1/models");
 	assert.equal(requests[0].init.headers.Authorization, "Bearer meridian");
+	assert.equal(
+		models.find(({ id }) => id === "claude-opus-5-5").contextWindow,
+		1_000_000,
+	);
 	assert.equal(
 		models.find(({ id }) => id === "claude-opus-5").contextWindow,
 		1_000_000,
@@ -824,6 +846,33 @@ test("Fable-tier 5.1 models remove forced tool choices but preserve normal choic
 	}
 });
 
+test("Opus 5.5 uses always-on adaptive thinking and rejects legacy options", async () => {
+	const pi = await registerWithEnv();
+	pi.thinkingLevel = "xhigh";
+	const hook = pi.handlers.get("before_provider_request");
+	const ctx = {
+		model: { provider: "meridian", id: "claude-opus-5-5" },
+		cwd: "/workspace",
+		getSystemPrompt: () => "system",
+	};
+	const payload = await hook({ payload: {
+		thinking: { type: "enabled", budget_tokens: 16_384 },
+		temperature: 0.7,
+		top_p: 0.8,
+		top_k: 20,
+		tool_choice: { type: "tool", name: "read" },
+	} }, ctx);
+
+	assert.deepEqual(payload.thinking, { type: "adaptive" });
+	assert.deepEqual(payload.output_config, { effort: "xhigh" });
+	for (const key of ["temperature", "top_p", "top_k", "tool_choice"]) {
+		assert.equal(key in payload, false);
+	}
+
+	const disabled = await hook({ payload: { thinking: { type: "disabled" } } }, ctx);
+	assert.equal("thinking" in disabled, false);
+});
+
 test("Claude 4.6 maps pi xhigh thinking to max effort", async () => {
 	const pi = await registerWithEnv();
 	pi.thinkingLevel = "xhigh";
@@ -1007,7 +1056,7 @@ test("session_start preserves passthrough and version warnings", async (t) => {
 		},
 		{
 			message:
-				"This extension requires Meridian >=1.60.0; runtime v1.59.0 may not support the registered models.",
+				"This extension requires Meridian >=1.75.0; runtime v1.59.0 may not support the registered models.",
 			level: "warning",
 		},
 	]);
@@ -1084,7 +1133,7 @@ test("/meridian start preserves passthrough and version warnings", async (t) => 
 	assert.equal(notifications.length, 2);
 	assert.match(notifications[0].message, /Pi-owned tools are not forwarded/);
 	assert.equal(notifications[0].level, "warning");
-	assert.match(notifications[1].message, /requires Meridian >=1.60.0/);
+	assert.match(notifications[1].message, /requires Meridian >=1.75.0/);
 	assert.equal(notifications[1].level, "warning");
 });
 
@@ -1174,7 +1223,7 @@ test("/meridian health displays runtime version when available", async (t) => {
 		text: async () =>
 			JSON.stringify({
 				status: "healthy",
-				version: "1.60.0",
+				version: "1.75.0",
 				mode: "sdk",
 				auth: {
 					loggedIn: true,
@@ -1198,7 +1247,7 @@ test("/meridian health displays runtime version when available", async (t) => {
 
 	assert.equal(notifications.length, 1);
 	assert.equal(notifications[0].level, "info");
-	assert.match(notifications[0].message, /Version: 1\.60\.0/);
+	assert.match(notifications[0].message, /Version: 1\.75\.0/);
 });
 
 test("/meridian health explains when Meridian is draining", async (t) => {
@@ -1343,5 +1392,5 @@ test("/meridian health warns when the runtime is too old", async (t) => {
 
 	assert.equal(notifications.length, 1);
 	assert.equal(notifications[0].level, "warning");
-	assert.match(notifications[0].message, /requires Meridian >=1\.60\.0/);
+	assert.match(notifications[0].message, /requires Meridian >=1\.75\.0/);
 });

@@ -12,7 +12,7 @@ const exec = promisify(execCallback);
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:3456";
 const DEFAULT_PORT = Number(new URL(DEFAULT_BASE_URL).port) || 3456;
-const MIN_MERIDIAN_VERSION = "1.60.0";
+const MIN_MERIDIAN_VERSION = "1.75.0";
 const HEALTH_TIMEOUT_MS = 3000;
 const STARTUP_WAIT_MS = 6000;
 const STARTUP_POLL_MS = 500;
@@ -36,6 +36,12 @@ const OPUS_COST = {
 	cacheRead: 0.5,
 	cacheWrite: 6.25,
 } as const;
+const OPUS_5_5_COST = {
+	input: 4,
+	output: 20,
+	cacheRead: 0.2,
+	cacheWrite: 5,
+} as const;
 const FABLE_COST = {
 	input: 10,
 	output: 50,
@@ -55,6 +61,7 @@ const HAIKU_COST = {
 	cacheWrite: 1.25,
 } as const;
 const ADAPTIVE_MODEL_IDS = new Set([
+	"claude-opus-5-5",
 	"claude-sonnet-5",
 	"claude-sonnet-4-6",
 	"claude-opus-5",
@@ -66,11 +73,13 @@ const ADAPTIVE_MODEL_IDS = new Set([
 	"claude-mythos-5-1",
 ]);
 const ALWAYS_ON_ADAPTIVE_MODEL_IDS = new Set([
+	"claude-opus-5-5",
 	"claude-fable-5",
 	"claude-fable-5-1",
 	"claude-mythos-5-1",
 ]);
 const SAMPLING_UNSUPPORTED_MODEL_IDS = new Set([
+	"claude-opus-5-5",
 	"claude-sonnet-5",
 	"claude-opus-5",
 	"claude-opus-4-7",
@@ -80,6 +89,7 @@ const SAMPLING_UNSUPPORTED_MODEL_IDS = new Set([
 	"claude-mythos-5-1",
 ]);
 const FORCED_TOOL_CHOICE_UNSUPPORTED_MODEL_IDS = new Set([
+	"claude-opus-5-5",
 	"claude-fable-5-1",
 	"claude-mythos-5-1",
 ]);
@@ -108,6 +118,17 @@ const MERIDIAN_MODELS: ProviderModelConfig[] = [
 		cost: SONNET_COST,
 		contextWindow: DEFAULT_CONTEXT_WINDOW,
 		maxTokens: 128_000,
+	},
+	{
+		id: "claude-opus-5-5",
+		name: "Claude Opus 5.5 (Meridian)",
+		reasoning: true,
+		thinkingLevelMap: { off: null, xhigh: "xhigh", max: "max" },
+		input: DEFAULT_MODEL_INPUT,
+		cost: OPUS_5_5_COST,
+		contextWindow: DEFAULT_CONTEXT_WINDOW,
+		maxTokens: 128_000,
+		compat: { forceAdaptiveThinking: true, supportsTemperature: false },
 	},
 	{
 		id: "claude-opus-5",
