@@ -6,7 +6,7 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 ## What it does
 
-- **Registers a `meridian` provider** with the current Meridian Claude models, including Sonnet 5, Opus 5, Fable 5.1, and Mythos 5.1
+- **Registers a `meridian` provider** with the current Meridian Claude models, including Opus 5.5, Sonnet 5, Fable 5.1, and Mythos 5.1
 - **Rewrites the system prompt** to avoid the extra-usage error, preserving project context and working directory. Fable 5 keeps its full prompt.
 - **Sends Pi's session ID** as `x-session-affinity` so Meridian can identify tool-result continuations. Explicit affinity headers are preserved.
 - **Auto-starts Meridian** on session start if the local proxy isn't running. Remote URLs never trigger local startup.
@@ -18,6 +18,7 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 |----|------|
 | `meridian/claude-sonnet-5` | Claude Sonnet 5 |
 | `meridian/claude-sonnet-4-6` | Claude Sonnet 4.6 |
+| `meridian/claude-opus-5-5` | Claude Opus 5.5 |
 | `meridian/claude-opus-5` | Claude Opus 5 |
 | `meridian/claude-opus-4-6` | Claude Opus 4.6 |
 | `meridian/claude-opus-4-7` | Claude Opus 4.7 |
@@ -29,7 +30,7 @@ Without this extension, pi's default system prompt triggers an `"You're out of e
 
 Use them with `--model`, e.g. `--model meridian/claude-fable-5-1:xhigh`.
 
-Mythos 5.1 is invitation-only for Project Glasswing customers. Fable 5.1 and Mythos 5.1 use Anthropic's $10/$50 per-million-token rates and $0.25 per-million-token cache reads. They require adaptive thinking, so the extension removes unsupported sampling fields and forced tool choices.
+Mythos 5.1 is invitation-only for Project Glasswing customers. Fable 5.1 and Mythos 5.1 use Anthropic's $10/$50 per-million-token rates and $0.25 per-million-token cache reads. Opus 5.5 uses $4/$20 rates, $0.20 cache reads, and $5 five-minute cache writes. Opus 5.5, Fable 5.1, and Mythos 5.1 require always-on adaptive thinking; the extension removes unsupported sampling fields and forced tool choices. Anthropic binds their thinking blocks to the model and conversation: keep prompts and tools unchanged mid-session, and start a fresh Pi session when switching models if those turns include Opus 5.5, Fable 5.1, or Mythos 5.1.
 
 Opus, Fable, and Mythos models start with a conservative 200k context window and refresh from Meridian's `/v1/models` catalog. Eligible subscriptions then advertise the 1M tier; without a successful catalog, the extension keeps the safe 200k baseline. After a successful refresh, Pi retains the last-known catalog during an aborted refresh.
 
@@ -39,7 +40,7 @@ Opus, Fable, and Mythos models start with a conservative 200k context window and
 pi install npm:pi-meridian-extension
 ```
 
-Requires pi 0.81.1 or newer and [Meridian](https://github.com/rynfar/meridian) 1.60.0 or newer installed globally:
+Requires pi 0.81.1 or newer and [Meridian](https://github.com/rynfar/meridian) 1.75.0 or newer installed globally:
 
 ```bash
 npm install -g @rynfar/meridian
@@ -78,13 +79,13 @@ extensions: /path/to/other/extension.ts, /opt/homebrew/lib/node_modules/pi-merid
 After installing, switch your model in pi:
 
 ```
-/model meridian/claude-opus-5:high
+/model meridian/claude-opus-5-5:high
 ```
 
 Or use it for a single command:
 
 ```bash
-pi --model meridian/claude-opus-5:high
+pi --model meridian/claude-opus-5-5:high
 ```
 
 ## Commands
