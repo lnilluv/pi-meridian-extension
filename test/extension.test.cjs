@@ -32,7 +32,12 @@ function createMockPi() {
 	return pi;
 }
 
-async function registerWithEnv(env = {}) {
+const CATALOG_CACHE_KEY = Symbol.for("pi-meridian-extension.catalog-context-windows");
+
+// Each registration models a fresh Pi process unless a test opts into keeping
+// the process-wide catalog cache (the /reload case).
+async function registerWithEnv(env = {}, { keepCatalogCache = false } = {}) {
+	if (!keepCatalogCache) delete globalThis[CATALOG_CACHE_KEY];
 	const previous = {
 		MERIDIAN_API_KEY: process.env.MERIDIAN_API_KEY,
 		MERIDIAN_PROFILE: process.env.MERIDIAN_PROFILE,
@@ -515,6 +520,47 @@ test("model refresh applies Meridian's account-aware context windows", async (t)
 		1_000_000,
 	);
 	assert.equal(requests.length, 2);
+});
+
+test("a reloaded extension keeps the refreshed context windows", async (t) => {
+	const originalFetch = global.fetch;
+	t.after(() => {
+		global.fetch = originalFetch;
+	});
+	global.fetch = async () => ({
+		ok: true,
+		status: 200,
+		json: async () => ({
+			data: [{ id: "claude-opus-5-5", context_window: 1_000_000 }],
+		}),
+	});
+
+	const first = await registerWithEnv();
+	await first.providers.get("meridian").refreshModels({
+		allowNetwork: true,
+		signal: new AbortController().signal,
+		store: {},
+	});
+
+	// /reload re-creates the extension in the same process.
+	global.fetch = async () => {
+		throw new Error("a reload must not need the network");
+	};
+	const reloaded = (await registerWithEnv({}, { keepCatalogCache: true })).providers.get("meridian");
+	const opus = (models) => models.find(({ id }) => id === "claude-opus-5-5").contextWindow;
+	assert.equal(opus(reloaded.models), 1_000_000, "registered models carry the fetched window");
+	const offline = await reloaded.refreshModels({
+		allowNetwork: false,
+		signal: new AbortController().signal,
+		store: {},
+	});
+	assert.equal(opus(offline), 1_000_000, "offline refresh keeps the fetched window");
+
+	// The cache is keyed by base URL: another daemon starts from safe defaults.
+	const other = (
+		await registerWithEnv({ MERIDIAN_BASE_URL: "http://127.0.0.1:4567" }, { keepCatalogCache: true })
+	).providers.get("meridian");
+	assert.equal(opus(other.models), 200_000);
 });
 
 test("model refresh falls back to safe defaults when the catalog is unavailable", async (t) => {
