@@ -250,6 +250,18 @@ function parseModelCatalogContextWindows(value: unknown): Map<string, number> {
 	return contextWindows;
 }
 
+// Pi re-creates extensions on /reload, which would reset the catalog to the
+// safe defaults and re-register 200k windows until the next network refresh.
+// Keep the last fetched catalog for the life of the process, keyed by base URL,
+// so a reloaded instance registers the account-aware windows immediately.
+const CATALOG_CACHE_KEY = Symbol.for("pi-meridian-extension.catalog-context-windows");
+
+function getCatalogCache(): Map<string, Map<string, number>> {
+	const holder = globalThis as { [CATALOG_CACHE_KEY]?: Map<string, Map<string, number>> };
+	holder[CATALOG_CACHE_KEY] ??= new Map();
+	return holder[CATALOG_CACHE_KEY];
+}
+
 function applyModelCatalogContextWindows(
 	contextWindows: Map<string, number>,
 ): ProviderModelConfig[] {
@@ -770,7 +782,10 @@ export default function (pi: ExtensionAPI) {
 		...providerHeaders,
 		Authorization: `Bearer ${apiKey}`,
 	};
-	let lastKnownModels = MERIDIAN_MODELS;
+	const cachedContextWindows = getCatalogCache().get(baseUrl);
+	let lastKnownModels = cachedContextWindows
+		? applyModelCatalogContextWindows(cachedContextWindows)
+		: MERIDIAN_MODELS;
 
 	// Register the Meridian provider
 	pi.registerProvider("meridian", {
@@ -779,7 +794,7 @@ export default function (pi: ExtensionAPI) {
 		api: "anthropic-messages",
 		authHeader: true,
 		headers: providerHeaders,
-		models: MERIDIAN_MODELS,
+		models: lastKnownModels,
 		refreshModels: async ({ allowNetwork, signal }) => {
 			if (!allowNetwork || signal?.aborted) return lastKnownModels;
 
@@ -795,10 +810,10 @@ export default function (pi: ExtensionAPI) {
 				}
 
 				const catalog: unknown = await response.json();
-				const refreshed = applyModelCatalogContextWindows(
-					parseModelCatalogContextWindows(catalog),
-				);
+				const contextWindows = parseModelCatalogContextWindows(catalog);
+				const refreshed = applyModelCatalogContextWindows(contextWindows);
 				if (signal?.aborted) return lastKnownModels;
+				getCatalogCache().set(baseUrl, contextWindows);
 				lastKnownModels = refreshed;
 				return refreshed;
 			} catch (error) {
