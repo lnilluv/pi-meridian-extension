@@ -1,6 +1,6 @@
 {
   "name": "pi-meridian-extension",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Meridian proxy provider for pi — use your Claude Max subscription through the Meridian local proxy",
   "type": "module",
   "scripts": {
@@ -10,6 +10,7 @@
   "keywords": ["pi-package", "pi", "meridian", "claude"],
   "files": [
     "README.md",
+    "CHANGELOG.md",
     "extensions/"
   ],
   "repository": {
