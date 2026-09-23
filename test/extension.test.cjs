@@ -565,7 +565,7 @@ test("package uses the current Pi host package", () => {
 	);
 	assert.equal(
 		packageJson.devDependencies["@earendil-works/pi-coding-agent"],
-		"0.81.1",
+		"0.84.0",
 	);
 	assert.equal(
 		packageJson.peerDependencies["@mariozechner/pi-coding-agent"],
